@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcadian Trail - The Last Safe Road</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+</head>
+<body>
+
+  <!-- TITLE SCREEN -->
+  <div id="screen-title" class="screen active">
+    <div class="title-container">
+      <h1 class="title-main">Arcadian Trail</h1>
+      <p class="title-sub">The Last Safe Road</p>
+      <p class="title-desc">The year is 2045. Climate collapse has made the coasts and sunbelt unlivable. You must lead your family north — through wildfires, floods, and failing infrastructure — to reach a climate refuge before your supplies run out.</p>
+      <button id="btn-start" class="btn-primary">Start Journey</button>
+    </div>
+  </div>
+
+  <!-- SETUP SCREEN -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-container">
+      <h2>Plan Your Journey</h2>
+
+      <div class="setup-section">
+        <h3>Where are you fleeing?</h3>
+        <select id="select-origin" class="setup-select"></select>
+        <p id="origin-desc" class="desc-text"></p>
+      </div>
+
+      <div class="setup-section">
+        <h3>Where are you headed?</h3>
+        <select id="select-dest" class="setup-select"></select>
+      </div>
+
+      <div class="setup-section">
+        <h3>Family Leader</h3>
+        <input type="text" id="input-name" class="setup-input" placeholder="Leader name (default: Walker)" maxlength="20">
+        <div class="setup-row">
+          <label>Family size:
+            <select id="select-family-size" class="setup-select-sm">
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="setup-section">
+        <h3>Leader Trait</h3>
+        <div id="trait-options" class="trait-grid"></div>
+      </div>
+
+      <div class="setup-section">
+        <h3>Supplies <span class="budget-label">Budget: <span id="budget-remaining">100</span></span></h3>
+        <div id="item-options" class="item-grid"></div>
+      </div>
+
+      <p id="setup-error" class="error-text"></p>
+      <button id="btn-begin-journey" class="btn-primary">Begin Journey</button>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="screen-game" class="screen">
+    <div class="game-layout">
+      <div class="game-map-section">
+        <pre id="asciiDisplay" class="ascii-display"></pre>
+        <div id="asciiInfoBar" class="ascii-info-bar"></div>
+      </div>
+      <div class="game-side">
+        <div id="dashboard" class="dashboard"></div>
+        <div id="event-panel" class="event-panel"></div>
+        <div class="journal-section">
+          <h3>Journey Log</h3>
+          <div id="log-entries" class="log-entries"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- END SCREEN -->
+  <div id="screen-end" class="screen">
+    <div class="end-container">
+      <h2 id="end-title"></h2>
+      <div id="end-score"></div>
+      <div id="end-summary"></div>
+      <div class="journal-section">
+        <h3>Full Journal</h3>
+        <div id="end-journal" class="log-entries"></div>
+      </div>
+      <button id="btn-play-again" class="btn-primary">Play Again</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

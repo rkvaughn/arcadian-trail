@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="32" height="32" fill="#2c3e50"/>
+    
+    <!-- Road -->
+    <path d="M4 16 L28 16" stroke="#e74c3c" stroke-width="4" stroke-linecap="round"/>
+    
+    <!-- Climate elements -->
+    <circle cx="8" cy="8" r="3" fill="#3498db" opacity="0.8"/> <!-- Water -->
+    <path d="M20 6 L24 10 L20 14 L16 10 Z" fill="#e67e22" opacity="0.8"/> <!-- Fire -->
+    <path d="M24 20 Q28 16 24 12" stroke="#2ecc71" stroke-width="2" fill="none" opacity="0.8"/> <!-- Wind -->
+    
+    <!-- Road markings -->
+    <path d="M8 16 L12 16" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+    <path d="M16 16 L20 16" stroke="#fff" stroke-width="2" stroke-dasharray="2 2"/>
+</svg> 

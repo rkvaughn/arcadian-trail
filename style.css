@@ -408,6 +408,53 @@ body {
   color: var(--text-dim);
 }
 
+/* === FAMILY ROSTER === */
+.family-roster {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 0.8em;
+}
+
+.roster-title {
+  color: var(--text-dim);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.roster-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.roster-member {
+  color: var(--text);
+}
+
+.roster-member.dead {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.roster-leader {
+  color: var(--gold);
+}
+
+/* === DEATH MESSAGE (event result) === */
+.result-death {
+  color: var(--red);
+  font-weight: bold;
+  font-size: 0.95em;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: var(--radius);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
 /* === EVENT PANEL === */
 .event-panel {
   transition: all 0.3s;

@@ -44,6 +44,7 @@ export function createFamily(leaderName, leaderTrait, familySize) {
       name: leaderName,
       age: 30 + Math.floor(Math.random() * 15),
       health: 100,
+      alive: true,
       trait: leaderTrait,
       isLeader: true
     }
@@ -64,6 +65,7 @@ export function createFamily(leaderName, leaderTrait, familySize) {
       name,
       age,
       health: 100,
+      alive: true,
       trait: null,
       isLeader: false
     });
@@ -82,7 +84,7 @@ export function getFamilyPassives(family) {
   };
 
   for (const member of family) {
-    if (member.trait && member.health > 0 && TRAITS[member.trait]) {
+    if (member.trait && member.alive && TRAITS[member.trait]) {
       const traitPassives = TRAITS[member.trait].passive;
       for (const [key, value] of Object.entries(traitPassives)) {
         if (key in passives) {

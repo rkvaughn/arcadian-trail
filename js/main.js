@@ -38,8 +38,23 @@ class GameController {
     });
 
     this.progressMap = new ProgressMap(document.getElementById('progressMap'));
+    this.familyRoster = document.getElementById('family-roster');
 
     this.screens.initTitle();
+  }
+
+  updateRoster() {
+    if (!this.game.family.length) {
+      this.familyRoster.innerHTML = '';
+      return;
+    }
+    const members = this.game.family.map(m => {
+      const cls = !m.alive ? 'roster-member dead' : m.isLeader ? 'roster-member roster-leader' : 'roster-member';
+      const icon = m.isLeader ? '\u2605 ' : '';
+      const status = !m.alive ? ' \u2620' : '';
+      return `<span class="${cls}">${icon}${m.name}${status}</span>`;
+    }).join('');
+    this.familyRoster.innerHTML = `<div class="roster-title">Party</div><div class="roster-list">${members}</div>`;
   }
 
   beginGame(origin, dest, leaderName, leaderTrait, familySize, items) {
@@ -51,6 +66,7 @@ class GameController {
     }
 
     this.dashboard.update(this.game.resources);
+    this.updateRoster();
     this.logger.clear();
     this.logger.log(`Departing ${origin.name} for ${dest.name}...`, 'info');
     this.fetchWeatherForWaypoint();
@@ -84,16 +100,20 @@ class GameController {
       if (!result) return;
 
       this.dashboard.update(this.game.resources);
+      this.updateRoster();
 
       switch (result.type) {
         case 'travel': {
+          if (result.death) {
+            this.logger.log(`\u2620\uFE0F ${result.death.message}`, 'danger');
+          }
           if (result.encounter) {
             // Encounters get their own log style
             const hasPositive = Object.values(result.encounter.effects).some(v => v > 0);
             const hasNegative = Object.values(result.encounter.effects).some(v => v < 0);
             const logType = hasNegative ? 'danger' : hasPositive ? 'success' : 'info';
             this.logger.log(result.encounter.text, logType);
-          } else {
+          } else if (!result.death) {
             const narrative = getRandomNarrative(result.terrain);
             if (narrative && this.game.day % 2 === 0) {
               this.logger.log(narrative, 'info');
@@ -145,6 +165,7 @@ class GameController {
     if (!result) return;
 
     this.dashboard.update(this.game.resources);
+    this.updateRoster();
 
     if (result.type === 'gameOver') {
       this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
@@ -155,6 +176,10 @@ class GameController {
 
     this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
     this.logger.log(result.narrative, 'info');
+
+    if (result.death) {
+      this.logger.log(`\u2620\uFE0F ${result.death.message}`, 'danger');
+    }
   }
 
   startRenderLoop() {

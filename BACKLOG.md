@@ -33,7 +33,8 @@
 | G15 | Creative endings — 90s action movie taglines that vary based on perils encountered during the journey | 2 | 3 | done |
 | G16 | Make inventory matter at decision points — add more `itemRequired`/`itemBonus` branches to events so starting resource selections have visible impact; surface item usage in outcome narratives | 3 | 4 | done |
 | V7 | ASCII progress map — simplified US map outline showing route and current position, airline-flight-tracker style | 5 | 5 | done |
-| G7 | Route branching at waypoints (safer vs. faster) | 5 | 6 | defer |
+| G17 | Party member deaths — family members can die of dysentery (and other causes) during crisis events. Log iconic "[Name] has died of dysentery" messages. Track family roster, reduce family size, affect morale, trigger game over if leader dies. | 5 | 6 | done |
+| G7 | Route branching at waypoints (safer vs. faster) | 5 | 7 | defer |
 
 ### Phase 3: Marquee Feature (8 pts)
 | # | Task | Points |
@@ -100,6 +101,7 @@
 | C25 | Creative endings — 90s action taglines keyed to dominant peril type (win + lose pools) | 2 | 3 | 2026-02-11 |
 | C26 | Inventory matters — 18 item synergies across 28 events, all 10 items wired up, itemNarrative support | 3 | 3 | 2026-02-11 |
 | C27 | ASCII progress map — US outline with route/waypoint plotting, position tracker, color-coded markers | 5 | 3 | 2026-02-11 |
+| C28 | Party member deaths — travel & event death paths, family roster UI, end screen roster, scoring fix | 5 | 3 | 2026-02-11 |
 
 ---
 

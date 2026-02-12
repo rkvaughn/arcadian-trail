@@ -59,9 +59,14 @@ export class EventPanel {
       }).join(' ');
     }
 
+    const deathHtml = result.death
+      ? `<p class="result-death">\u2620\uFE0F ${result.death.message}</p>`
+      : '';
+
     card.innerHTML = `
       <p class="result-narrative">${result.narrative}</p>
       <div class="result-effects">${effectsHtml}</div>
+      ${deathHtml}
       <button class="btn-continue" id="btn-continue" style="display:none">Continue Journey</button>
     `;
 

@@ -113,7 +113,12 @@ export class Game {
       this.addJournal(`Day ${this.day}: ${result.encounter.text}`);
     }
 
-    return { type: 'travel', terrain: result.terrain, miles: result.milesPerDay, encounter: result.encounter };
+    // Log party member death
+    if (result.death) {
+      this.addJournal(`Day ${this.day}: ${result.death.message}`);
+    }
+
+    return { type: 'travel', terrain: result.terrain, miles: result.milesPerDay, encounter: result.encounter, death: result.death };
   }
 
   // Player makes a choice during an event
@@ -125,6 +130,11 @@ export class Game {
     this.lastResult = result;
 
     this.addJournal(`Day ${this.day}: ${result.narrative}`);
+
+    // Log party member death from event
+    if (result.death) {
+      this.addJournal(`Day ${this.day}: ${result.death.message}`);
+    }
 
     // Check for game over after event
     const gameOver = this.checkGameOver();

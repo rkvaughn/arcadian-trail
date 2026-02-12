@@ -102,8 +102,55 @@ export function applyChoice(gameState, event, choiceIndex) {
     ? outcome.itemNarrative
     : outcome.narrative;
 
+  // Severe health damage from events can kill a party member
+  const death = checkEventDeath(gameState, effects, event.perilType);
+
   return {
     narrative,
+    death,
     effects
   };
+}
+
+// Event death causes keyed by perilType
+const EVENT_DEATH_CAUSES = {
+  wildfire:       ['was caught in the flames.', 'didn\'t make it through the fire.'],
+  hurricane:      ['was swept away by the storm.', 'was lost in the hurricane.'],
+  flood:          ['drowned in the floodwaters.', 'was swept away by the current.'],
+  heat:           ['died of heatstroke.', 'succumbed to the heat.'],
+  tornado:        ['was killed by flying debris.', 'was taken by the tornado.'],
+  infrastructure: ['was crushed by falling debris.', 'died in the collapse.'],
+  health:         ['has died of dysentery.', 'succumbed to illness.', 'didn\'t survive the sickness.'],
+  mechanical:     ['was killed in the accident.', 'died from injuries in the wreck.'],
+  social:        ['was killed in the confrontation.', 'didn\'t survive the encounter.'],
+};
+
+// Check if a severe event outcome kills a party member
+function checkEventDeath(gameState, effects, perilType) {
+  if (!effects.health || effects.health >= -8) return null; // only severe health hits
+
+  const alive = gameState.family.filter(m => m.alive);
+  if (alive.length <= 1) return null; // don't kill the last member
+
+  // Probability scales with damage severity: -10 → 15%, -15 → 30%, -20 → 45%
+  const damage = Math.abs(effects.health);
+  const deathChance = (damage - 8) * 0.03;
+
+  if (Math.random() > deathChance) return null;
+
+  // Pick a non-leader victim
+  const nonLeaders = alive.filter(m => !m.isLeader);
+  if (nonLeaders.length === 0) return null;
+
+  const victim = nonLeaders[Math.floor(Math.random() * nonLeaders.length)];
+  victim.alive = false;
+  victim.health = 0;
+
+  // Morale hit
+  gameState.resources.morale = Math.max(0, gameState.resources.morale - 15);
+
+  const messages = EVENT_DEATH_CAUSES[perilType] || EVENT_DEATH_CAUSES.health;
+  const message = `${victim.name} ${messages[Math.floor(Math.random() * messages.length)]}`;
+
+  return { name: victim.name, cause: perilType, message, isLeader: false };
 }

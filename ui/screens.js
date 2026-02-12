@@ -221,12 +221,19 @@ export class ScreenManager {
 
     const tagline = getTagline(game.perilHistory || [], isWin);
 
+    // Build family roster for end screen
+    const rosterHtml = game.family.map(m => {
+      if (m.alive) return `<span style="color:var(--green)">${m.name}</span>`;
+      return `<span style="color:var(--red);text-decoration:line-through">${m.name}</span>`;
+    }).join(' &middot; ');
+
     if (isWin) {
       title.textContent = tagline;
       title.className = 'end-win';
       summary.innerHTML = `
         <p>The ${game.family[0]?.name || 'your'} family reached <strong>${game.destination.name}</strong> in <strong>${game.day} days</strong>.</p>
         <p>${game.destination.description}</p>
+        <p style="margin-top:12px;font-size:0.9em;color:var(--text-dim)">Party: ${rosterHtml}</p>
       `;
     } else {
       title.textContent = tagline;
@@ -235,6 +242,7 @@ export class ScreenManager {
       summary.innerHTML = `
         <p>${lastEntry}</p>
         <p>The journey ended on <strong>Day ${game.day}</strong> near <strong>${game.getCurrentWaypoint()?.name || 'the road'}</strong>.</p>
+        <p style="margin-top:12px;font-size:0.9em;color:var(--text-dim)">Party: ${rosterHtml}</p>
       `;
     }
 

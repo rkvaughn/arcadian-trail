@@ -127,6 +127,9 @@ export function travelTick(gameState) {
     }
   }
 
+  // Check for party member death
+  const death = checkForDeath(gameState);
+
   // Check for game over
   const gameOver = checkGameOver(resources);
 
@@ -139,6 +142,7 @@ export function travelTick(gameState) {
     waypointName: reachedWaypoint ? nextWaypoint.name : currentWaypoint.name,
     terrain,
     milesPerDay,
+    death,
     gameOver
   };
 }
@@ -170,6 +174,67 @@ function selectEncounter(terrain) {
   );
   if (pool.length === 0) return null;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Death causes keyed by triggering condition
+const DEATH_CAUSES = {
+  dysentery:    ['has died of dysentery.', 'succumbed to dysentery.'],
+  dehydration:  ['died of dehydration.', 'collapsed from thirst and never got up.'],
+  heatstroke:   ['died of heatstroke.', 'succumbed to the heat.'],
+  starvation:   ['starved to death.', 'wasted away from hunger.'],
+  illness:      ['died of illness.', 'succumbed to fever in the night.'],
+  injury:       ['died from injuries.', 'didn\'t survive their wounds.'],
+  exposure:     ['died of exposure.', 'froze in the night.'],
+};
+
+// Check if a family member dies this tick. Probability scales with bad conditions.
+function checkForDeath(gameState) {
+  const { resources, family } = gameState;
+  const alive = family.filter(m => m.alive);
+  if (alive.length <= 1) return null; // don't kill the last member via this path
+
+  // Base death chance per tick — very low, escalates with bad resources
+  let deathChance = 0;
+  let cause = 'illness';
+
+  if (resources.water < 20) {
+    deathChance += (20 - resources.water) * 0.004;
+    cause = resources.water < 10 ? 'dehydration' : 'dysentery';
+  }
+  if (resources.health < 25) {
+    deathChance += (25 - resources.health) * 0.003;
+    cause = resources.health < 10 ? 'injury' : 'illness';
+  }
+  if (resources.food < 15) {
+    deathChance += (15 - resources.food) * 0.003;
+    cause = 'starvation';
+  }
+
+  // Weather/terrain can shift the cause
+  if (gameState.weatherRisk) {
+    if (gameState.weatherRisk.heat) {
+      deathChance += gameState.weatherRisk.heat * 0.01;
+      if (resources.water < 30) cause = 'heatstroke';
+    }
+  }
+
+  if (deathChance <= 0 || Math.random() > deathChance) return null;
+
+  // Pick a non-leader victim (leaders die last — game over handles that)
+  const nonLeaders = alive.filter(m => !m.isLeader);
+  if (nonLeaders.length === 0) return null;
+
+  const victim = nonLeaders[Math.floor(Math.random() * nonLeaders.length)];
+  victim.alive = false;
+  victim.health = 0;
+
+  // Morale hit
+  resources.morale = Math.max(0, resources.morale - 15);
+
+  const messages = DEATH_CAUSES[cause] || DEATH_CAUSES.illness;
+  const message = `${victim.name} ${messages[Math.floor(Math.random() * messages.length)]}`;
+
+  return { name: victim.name, cause, message, isLeader: false };
 }
 
 function checkGameOver(resources) {

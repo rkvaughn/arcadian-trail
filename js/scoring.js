@@ -26,7 +26,7 @@ export function calculateScore(game, isWin) {
   }
 
   // Family survival
-  const aliveMembers = game.family.filter(m => m.health > 0).length;
+  const aliveMembers = game.family.filter(m => m.alive).length;
   const familyScore = aliveMembers * 50;
   total += familyScore;
   breakdown.push({ label: `Family members (${aliveMembers}/${game.family.length})`, value: familyScore });

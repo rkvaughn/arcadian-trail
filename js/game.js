@@ -33,6 +33,8 @@ export class Game {
     this.lastResult = null;
     this.weatherRisk = null;
     this.journalEntries = [];
+    this.recentPerilTypes = [];
+    this.perilHistory = [];
     this.startBudget = 100;
     this.distanceTraveledToday = 0;
   }
@@ -64,6 +66,8 @@ export class Game {
     this.currentEvent = null;
     this.lastResult = null;
     this.journalEntries = [];
+    this.recentPerilTypes = [];
+    this.perilHistory = [];
 
     this.addJournal(`Day 1: The ${leaderName} family departs ${originCity.name}, heading for ${destCity.name}. ${originCity.description}`);
     this.state = STATES.TRAVELING;
@@ -95,7 +99,10 @@ export class Game {
 
     if (result.triggerEvent) {
       const terrain = this.route[this.waypointIndex].terrain;
-      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory);
+      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes);
+      this.recentPerilTypes.push(this.currentEvent.perilType);
+      if (this.recentPerilTypes.length > 3) this.recentPerilTypes.shift();
+      this.perilHistory.push(this.currentEvent.perilType);
       this.state = STATES.EVENT;
       this.addJournal(`Day ${this.day}: ${this.currentEvent.name}!`);
       return { type: 'event', event: this.currentEvent };

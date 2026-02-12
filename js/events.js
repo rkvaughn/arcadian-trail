@@ -1,12 +1,20 @@
 import { eventDefs } from '../data/eventDefs.js';
 
 // Select an event based on terrain, weather, and randomness
-export function selectEvent(terrain, weatherRisk, inventory) {
+// recentPerilTypes: last 3 peril types to suppress repeats
+export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = []) {
   const weights = [];
   let totalWeight = 0;
 
   for (const event of eventDefs) {
     let weight = event.baseProbability;
+
+    // Suppress recently-seen peril types (most recent = hardest penalty)
+    const lastIdx = recentPerilTypes.lastIndexOf(event.perilType);
+    if (lastIdx !== -1) {
+      const recency = recentPerilTypes.length - lastIdx; // 1 = most recent, 2 = two ago, etc.
+      weight *= recency === 1 ? 0.05 : recency === 2 ? 0.3 : 0.6;
+    }
 
     // Terrain bonus
     if (event.terrainBonus.includes(terrain)) {

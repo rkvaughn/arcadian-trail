@@ -3,6 +3,56 @@ import { getAvailableDestinations } from '../data/routes.js';
 import { getTraits } from '../js/characters.js';
 import { itemDefs } from '../data/items.js';
 
+// 90s action movie taglines keyed by dominant peril type
+const WIN_TAGLINES = {
+  flood:          ['They rode the flood. The flood blinked first.', 'Waterlogged. Unstoppable.', 'The river said no. They said watch us.'],
+  heat:           ['They drove through hell. Hell moved.', 'Burned by the sun. Never burned out.', '122 degrees. Zero quit.'],
+  wildfire:       ['Through the fire. Out the other side.', 'They outran the inferno.', 'Smoke clears. Legends don\'t.'],
+  hurricane:      ['The storm had a name. So did they.', 'Category 5. Family: unbreakable.', 'The wind howled. They howled back.'],
+  tornado:        ['The funnel touched down. They didn\'t flinch.', 'Twisted metal, straight resolve.'],
+  infrastructure: ['The grid died. They didn\'t.', 'No power. No problem.', 'Civilization crumbled. They kept driving.'],
+  health:         ['Sick, tired, alive.', 'The fever broke. They didn\'t.', 'Patched up. Pushed on.'],
+  mechanical:     ['Held together with duct tape and willpower.', 'The engine quit twice. They never did.'],
+  social:         ['Bandits, borders, bureaucrats — none of it stopped them.', 'They trusted strangers. It paid off.'],
+  positive:       ['Lucky breaks and iron will.', 'The road provided. They survived.'],
+  default:        ['Against all odds.', 'They made it. Barely.', 'The road was long. They were longer.'],
+};
+
+const LOSE_TAGLINES = {
+  flood:          ['The water won.', 'Drowned in a world that forgot how to drain.', 'The river doesn\'t negotiate.'],
+  heat:           ['Cooked by a planet with no thermostat.', 'The sun takes what it wants.', 'Heat: 1. Humanity: 0.'],
+  wildfire:       ['Ash to ash.', 'The fire always catches up.', 'You can\'t outrun what\'s everywhere.'],
+  hurricane:      ['The storm won this round.', 'Category 5 doesn\'t care about your plans.'],
+  tornado:        ['Twisted apart by the sky itself.', 'The plains gave no shelter.'],
+  infrastructure: ['The system failed them. Then so did everything else.', 'No grid. No chance.'],
+  health:         ['The body has limits. They found them.', 'Fever took what the road couldn\'t.'],
+  mechanical:     ['The engine died. Then the hope.', 'Stranded. Then forgotten.'],
+  social:         ['Trust is expensive on a dying road.', 'The human cost of human nature.'],
+  default:        ['The road wins again.', 'Not everyone makes it.', 'Some journeys end in the middle.'],
+};
+
+function getTagline(perilHistory, isWin) {
+  const taglines = isWin ? WIN_TAGLINES : LOSE_TAGLINES;
+
+  // Find the dominant peril type (most frequent)
+  const counts = {};
+  for (const type of perilHistory) {
+    counts[type] = (counts[type] || 0) + 1;
+  }
+
+  let dominant = 'default';
+  let maxCount = 0;
+  for (const [type, count] of Object.entries(counts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominant = type;
+    }
+  }
+
+  const pool = taglines[dominant] || taglines.default;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 export class ScreenManager {
   constructor(onSetupComplete) {
     this.onSetupComplete = onSetupComplete;
@@ -169,15 +219,17 @@ export class ScreenManager {
     const journal = document.getElementById('end-journal');
     const scoreEl = document.getElementById('end-score');
 
+    const tagline = getTagline(game.perilHistory || [], isWin);
+
     if (isWin) {
-      title.textContent = 'Journey Complete!';
+      title.textContent = tagline;
       title.className = 'end-win';
       summary.innerHTML = `
         <p>The ${game.family[0]?.name || 'your'} family reached <strong>${game.destination.name}</strong> in <strong>${game.day} days</strong>.</p>
         <p>${game.destination.description}</p>
       `;
     } else {
-      title.textContent = 'Journey Over';
+      title.textContent = tagline;
       title.className = 'end-lose';
       const lastEntry = game.journalEntries[game.journalEntries.length - 1] || '';
       summary.innerHTML = `

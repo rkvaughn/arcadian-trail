@@ -10,7 +10,7 @@
 
 | # | Task | Points | Notes |
 |---|------|--------|-------|
-| — | *(none)* | — | — |
+| — | *(none — Phase 2 in progress)* | — | — |
 
 ---
 
@@ -25,11 +25,14 @@
 | G6 | Random roadside encounters (non-modal, journal + minor resource fx) | 3 | done |
 | G5 | Day/night cycle — tie to multi-day phases, not per-tick (avoid strobe) | 3 | done |
 
-### Phase 2: Strategic Depth (10 pts) — *current*
-| # | Task | Points |
-|---|------|--------|
-| G4 | More event types (trade caravan, river crossing, etc.) | 5 |
-| G7 | Route branching at waypoints (safer vs. faster) | 5 |
+### Phase 2: Strategic Depth (19 pts) — *current*
+| # | Task | Points | Priority | Status |
+|---|------|--------|----------|--------|
+| G14 | Peril deduplication — ensure back-to-back events can't repeat the same type; add more variety to event pool | 2 | 1 | done |
+| G4 | More event types (trade caravan, river crossing, etc.) | 5 | 2 | done |
+| G15 | Creative endings — 90s action movie taglines that vary based on perils encountered during the journey | 2 | 3 | done |
+| V7 | ASCII progress map — simplified US map outline showing route and current position, airline-flight-tracker style | 5 | 4 | |
+| G7 | Route branching at waypoints (safer vs. faster) | 5 | 5 | |
 
 ### Phase 3: Marquee Feature (8 pts)
 | # | Task | Points |
@@ -91,6 +94,9 @@
 | C20 | More narrative variety — 45 terrain-specific narratives | 2 | 2 | 2025-02-11 |
 | C21 | Random roadside encounters — 20 encounters, non-modal with resource fx | 3 | 2 | 2025-02-11 |
 | C22 | Day/night cycle — 4-phase palette shifts via CSS classes | 3 | 2 | 2025-02-11 |
+| C23 | Peril deduplication — recent event type suppression (95/70/40% penalties) | 2 | 3 | 2026-02-11 |
+| C24 | 8 new event types — river crossing, iron caravan, flash freeze, blight, storm surge, refugee checkpoint, solar farm, abandoned hospital | 5 | 3 | 2026-02-11 |
+| C25 | Creative endings — 90s action taglines keyed to dominant peril type (win + lose pools) | 2 | 3 | 2026-02-11 |
 
 ---
 

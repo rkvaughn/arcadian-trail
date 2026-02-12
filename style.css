@@ -311,18 +311,18 @@ body {
   border: 1px solid rgba(255,255,255,0.08);
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-family: 'Courier New', monospace;
-  font-size: clamp(7px, 1.4vw, 10px);
-  line-height: 1.2;
-  color: #3a3a4a;
+  font-size: clamp(6px, 1.2vw, 9px);
+  line-height: 1.15;
+  color: #2a2a3a;
   white-space: pre;
   overflow: hidden;
   margin: 0;
 }
-.map-player  { color: var(--gold); font-weight: bold; }
+.map-player  { color: var(--gold); font-weight: bold; text-shadow: 0 0 4px var(--gold); }
 .map-visited { color: var(--green); }
-.map-route   { color: var(--text-dim); }
+.map-route   { color: var(--accent); }
 
 /* === DAY/NIGHT CYCLE === */
 .ascii-display.time-dawn {

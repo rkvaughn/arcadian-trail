@@ -101,7 +101,12 @@ export class Game {
       return { type: 'event', event: this.currentEvent };
     }
 
-    return { type: 'travel', terrain: result.terrain, miles: result.milesPerDay };
+    // Log roadside encounter if one fired
+    if (result.encounter) {
+      this.addJournal(`Day ${this.day}: ${result.encounter.text}`);
+    }
+
+    return { type: 'travel', terrain: result.terrain, miles: result.milesPerDay, encounter: result.encounter };
   }
 
   // Player makes a choice during an event

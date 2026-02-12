@@ -14,7 +14,7 @@ export const eventDefs = [
       {
         text: 'Drive through the smoke',
         outcomes: {
-          effects: { health: -15, fuel: -8 },
+          effects: { health: -22, fuel: -12 },
           narrative: 'You gun it through the flames. The heat cracks the windshield but you make it through, coughing and shaken.'
         }
       },
@@ -52,7 +52,7 @@ export const eventDefs = [
       {
         text: 'Try to outrun it',
         outcomes: {
-          effects: { fuel: -25, health: -10 },
+          effects: { fuel: -30, health: -18 },
           narrative: 'You floor it north. Flying debris dents the car and fuel burns fast, but you escape the eye.'
         }
       }
@@ -69,7 +69,7 @@ export const eventDefs = [
       {
         text: 'Ford the water slowly',
         outcomes: {
-          effects: { health: -12, fuel: -5 },
+          effects: { health: -18, fuel: -8 },
           narrative: 'Water reaches the doors. The engine sputters but holds. You crawl through, soaked and rattled.'
         }
       },
@@ -107,7 +107,7 @@ export const eventDefs = [
       {
         text: 'Push through without stopping',
         outcomes: {
-          effects: { water: -18, health: -8 },
+          effects: { water: -25, health: -12 },
           narrative: 'You ration sips and drive in silence. By nightfall, lips are cracked and heads are pounding.'
         }
       }
@@ -131,7 +131,7 @@ export const eventDefs = [
       {
         text: 'Keep driving — push through',
         outcomes: {
-          effects: { health: -15, water: -12 },
+          effects: { health: -22, water: -18 },
           narrative: 'Someone faints in the back seat. You pour precious water over their neck. The heat is relentless.'
         }
       },
@@ -389,7 +389,7 @@ export const eventDefs = [
       {
         text: 'Push on and hope for the best',
         outcomes: {
-          effects: { health: -18, morale: -12 },
+          effects: { health: -25, morale: -18 },
           narrative: 'The fever spikes. Delirium sets in. By the time it breaks, everyone is scared and exhausted.'
         }
       }
@@ -415,7 +415,7 @@ export const eventDefs = [
       {
         text: 'Walk to the nearest town',
         outcomes: {
-          effects: { health: -10, water: -10, food: -5 },
+          effects: { health: -15, water: -15, food: -8 },
           narrative: 'A brutal 8-mile walk to find a mechanic. He charges in fuel. But the car runs again.'
         }
       }
@@ -439,7 +439,7 @@ export const eventDefs = [
       {
         text: 'Drive past without stopping',
         outcomes: {
-          effects: { morale: -15 },
+          effects: { morale: -22 },
           narrative: 'Eyes follow your car. A child waves. You keep driving. Nobody speaks for an hour.'
         }
       },
@@ -479,7 +479,7 @@ export const eventDefs = [
       {
         text: 'Risk drinking it',
         outcomes: {
-          effects: { health: -15, morale: -5 },
+          effects: { health: -22, morale: -10 },
           narrative: 'Stomach cramps hit within the hour. It\'s a miserable night, but you keep your water supply.'
         }
       }
@@ -527,7 +527,7 @@ export const eventDefs = [
       {
         text: 'Floor it through the barricade',
         outcomes: {
-          effects: { health: -10, fuel: -5 },
+          effects: { health: -18, fuel: -8 },
           narrative: 'Tires scream. Something hits the trunk. A window shatters. But you\'re through and gone.'
         }
       },

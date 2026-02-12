@@ -8,6 +8,7 @@ export class Logger {
     entry.className = `log-entry log-${type}`;
     entry.textContent = message;
     this.container.insertBefore(entry, this.container.firstChild);
+    entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     // Keep log manageable
     while (this.container.children.length > 50) {

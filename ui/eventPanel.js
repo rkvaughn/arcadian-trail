@@ -42,7 +42,7 @@ export class EventPanel {
     this.container.appendChild(card);
   }
 
-  showResult(result) {
+  showResult(result, delay = 1500) {
     this.container.innerHTML = '';
 
     const card = document.createElement('div');
@@ -62,12 +62,18 @@ export class EventPanel {
     card.innerHTML = `
       <p class="result-narrative">${result.narrative}</p>
       <div class="result-effects">${effectsHtml}</div>
-      <button class="btn-continue" id="btn-continue">Continue Journey</button>
+      <button class="btn-continue" id="btn-continue" style="display:none">Continue Journey</button>
     `;
 
     this.container.appendChild(card);
 
-    document.getElementById('btn-continue').addEventListener('click', () => {
+    // Delay before showing continue button so player can read the result
+    const btn = document.getElementById('btn-continue');
+    setTimeout(() => {
+      btn.style.display = '';
+    }, delay);
+
+    btn.addEventListener('click', () => {
       this.hide();
       this.onChoice('continue');
     });

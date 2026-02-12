@@ -8,12 +8,17 @@ import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js'
 import { calculateScore } from './scoring.js';
 import { getRandomNarrative } from '../data/narratives.js';
 
+const RENDER_INTERVAL_MS = 250;
+const TRAVEL_SPEED_MS = 2000;
+const WEATHER_FETCH_INTERVAL = 3; // days
+const EVENT_RESULT_DELAY_MS = 1500; // pause before showing continue button
+
 class GameController {
   constructor() {
     this.game = new Game();
     this.travelInterval = null;
     this.renderInterval = null;
-    this.travelSpeed = 1200; // ms per day
+    this.travelSpeed = TRAVEL_SPEED_MS;
     this.currentWeather = null;
 
     this.screens = new ScreenManager((origin, dest, name, trait, size, items) => {
@@ -79,9 +84,17 @@ class GameController {
 
       switch (result.type) {
         case 'travel': {
-          const narrative = getRandomNarrative(result.terrain);
-          if (narrative && this.game.day % 2 === 0) {
-            this.logger.log(narrative, 'info');
+          if (result.encounter) {
+            // Encounters get their own log style
+            const hasPositive = Object.values(result.encounter.effects).some(v => v > 0);
+            const hasNegative = Object.values(result.encounter.effects).some(v => v < 0);
+            const logType = hasNegative ? 'danger' : hasPositive ? 'success' : 'info';
+            this.logger.log(result.encounter.text, logType);
+          } else {
+            const narrative = getRandomNarrative(result.terrain);
+            if (narrative && this.game.day % 2 === 0) {
+              this.logger.log(narrative, 'info');
+            }
           }
           break;
         }
@@ -111,7 +124,7 @@ class GameController {
       // Fetch weather when reaching a new waypoint
       if (result.type === 'travel' || result.type === 'event') {
         // Only re-fetch occasionally (every 3 days or on new waypoint)
-        if (this.game.day % 3 === 0) {
+        if (this.game.day % WEATHER_FETCH_INTERVAL === 0) {
           this.fetchWeatherForWaypoint();
         }
       }
@@ -131,13 +144,13 @@ class GameController {
     this.dashboard.update(this.game.resources);
 
     if (result.type === 'gameOver') {
-      this.eventPanel.showResult(result);
+      this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
       this.logger.log(`${result.narrative}`, 'danger');
       setTimeout(() => this.endGame(false), 3000);
       return;
     }
 
-    this.eventPanel.showResult(result);
+    this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
     this.logger.log(result.narrative, 'info');
   }
 
@@ -145,7 +158,7 @@ class GameController {
     if (this.renderInterval) clearInterval(this.renderInterval);
     this.renderInterval = setInterval(() => {
       this.asciiRenderer.render(this.game, this.currentWeather);
-    }, 250);
+    }, RENDER_INTERVAL_MS);
   }
 
   endGame(isWin) {

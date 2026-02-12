@@ -1,12 +1,13 @@
 import { getFamilyPassives } from './characters.js';
+import { encounterDefs, ENCOUNTER_CHANCE } from '../data/encounterDefs.js';
 
 // Base burn rates per day of travel
 const BASE_RATES = {
-  fuel: -3,
-  water: -2,
-  food: -2,
-  health: -0.5,
-  morale: -1
+  fuel: -4,
+  water: -3,
+  food: -3,
+  health: -1,
+  morale: -1.5
 };
 
 // Terrain modifiers (multiplier on burn rates — higher = harsher)
@@ -26,7 +27,7 @@ const TERRAIN_MODIFIERS = {
 const BASE_MILES_PER_DAY = 120;
 
 // Event trigger base probability per travel tick
-const EVENT_BASE_CHANCE = 0.25;
+const EVENT_BASE_CHANCE = 0.30;
 
 export function travelTick(gameState) {
   const { resources, route, waypointIndex, family, inventory, weatherRisk } = gameState;
@@ -113,6 +114,19 @@ export function travelTick(gameState) {
   }
   const triggerEvent = Math.random() < eventChance;
 
+  // Check for roadside encounter (non-modal, minor effects)
+  let encounter = null;
+  if (!triggerEvent && Math.random() < ENCOUNTER_CHANCE) {
+    encounter = selectEncounter(terrain);
+    if (encounter) {
+      for (const [resource, value] of Object.entries(encounter.effects)) {
+        if (resource in resources) {
+          resources[resource] = Math.max(0, Math.min(100, resources[resource] + value));
+        }
+      }
+    }
+  }
+
   // Check for game over
   const gameOver = checkGameOver(resources);
 
@@ -120,6 +134,7 @@ export function travelTick(gameState) {
     arrived: false,
     changes,
     triggerEvent,
+    encounter,
     reachedWaypoint,
     waypointName: reachedWaypoint ? nextWaypoint.name : currentWaypoint.name,
     terrain,
@@ -146,6 +161,15 @@ function getItemPassives(inventory) {
     }
   }
   return passives;
+}
+
+function selectEncounter(terrain) {
+  // Filter to encounters that match this terrain (empty terrain array = any terrain)
+  const pool = encounterDefs.filter(
+    e => e.terrain.length === 0 || e.terrain.includes(terrain)
+  );
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function checkGameOver(resources) {

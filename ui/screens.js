@@ -206,8 +206,60 @@ export class ScreenManager {
       journal.appendChild(div);
     }
 
+    // Feedback form
+    const feedbackBtn = document.getElementById('btn-submit-feedback');
+    const feedbackText = document.getElementById('feedback-text');
+    const feedbackStatus = document.getElementById('feedback-status');
+
+    feedbackBtn.addEventListener('click', () => {
+      const text = feedbackText.value.trim();
+      if (!text) {
+        feedbackStatus.textContent = 'Please write something first.';
+        feedbackStatus.style.color = 'var(--yellow)';
+        return;
+      }
+
+      this.saveFeedback(text, game, isWin, score);
+      feedbackBtn.disabled = true;
+      feedbackText.disabled = true;
+      feedbackStatus.textContent = 'Thanks! Feedback saved.';
+      feedbackStatus.style.color = '';
+    });
+
+    document.getElementById('btn-export-feedback').addEventListener('click', () => {
+      this.exportFeedback();
+    });
+
     document.getElementById('btn-play-again').addEventListener('click', () => {
       location.reload();
     });
+  }
+
+  exportFeedback() {
+    const data = localStorage.getItem('arcadian-trail-feedback') || '[]';
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'feedback.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  saveFeedback(text, game, isWin, score) {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      feedback: text,
+      outcome: isWin ? 'win' : 'loss',
+      day: game.day,
+      score: score ? score.total : 0,
+      origin: game.origin?.name || '',
+      destination: game.destination?.name || '',
+    };
+
+    // Append to localStorage array
+    const existing = JSON.parse(localStorage.getItem('arcadian-trail-feedback') || '[]');
+    existing.push(entry);
+    localStorage.setItem('arcadian-trail-feedback', JSON.stringify(existing));
   }
 }

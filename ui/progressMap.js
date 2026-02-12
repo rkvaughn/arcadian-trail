@@ -1,90 +1,102 @@
-// ASCII US progress map — adapted from asciiart.cc/view/12125
+// ASCII US progress map — based on asciiart.cc/view/12125
 // Route overlay with color-coded markers
 
 const MAP_ROWS = 21;
-const MAP_COLS = 66;
 
-// Base map outline — state borders and coastline
+/* eslint-disable no-useless-escape */
+// Original art preserved with state labels for orientation.
+// Each line padded to uniform width for grid operations.
 const US_MAP = [
-  "         ,__                                                  _,",
-  " \\~\\|  ~~---___              ,                          | \\",
-  "  |      / |   ~~~~~~~|~~~~~| ~~---,                  _/  >",
-  " /~-_--__| |          |     \\     / ~\\~~/        /~|  |,'",
-  " |       /  \\         |------|   {    / /~)    __- ',| \\  ",
-  "/       |    |~~~~~~~~|      \\    \\   | | '~\\ |_____|~,-'  ",
-  "|~~--__ |    |        |____  |~~~~~|--| |__ /_-'     {,~    ",
-  "|   |  ~~~|~~|        |    ~~\\     /  `-' |`~ |_____{/     ",
-  "|   |     |  '---------.     \\----| . | . | ,' ~/~\\,|`    ",
-  "',  \\     |    |       |~~~~~~~|    \\  | ,'~~\\  /    |",
-  " |   \\    |    |       |      |     \\_-~    /`~___--\\",
-  " ',   \\  ,-----|-------+-------'_____/__----~~/      /",
-  "  '_   '\\|     |      |~~~|     |    |      _/-,~~-,/",
-  "    \\    |     |      |   |_    |   /~~|~~\\    \\,/     ",
-  "     ~~~-'     |      |     `~~~\\___| . | . |    /",
-  "         '-,_  | _____|          |  /   | ,-'---~\\",
-  "             `~'~  \\             |  `--,~~~~-~~,  \\",
-  "                    \\/~\\      /~~~`---`         |  \\",
-  "                        \\    /                   \\  |",
-  "                         \\  |                     \\'",
-  "                          `~'",
+  "         ,__                                                  _,  ",
+  " \\~\\|  ~~---___              ,                          | \\  ",
+  "  | Wash./ |   ~~~~~~~|~~~~~| ~~---,                VT_/,ME>  ",
+  " /~-_--__| |  Montana |N Dak\\ Minn/ ~\\~~/Mich.     /~| ||,' ",
+  " |Oregon /  \\         |------|   { WI / /~)     __-NY',|_\\,NH",
+  "/       |Ida.|~~~~~~~~|S Dak.\\    \\   | | '~\\  |_____|~,-'Mass.",
+  "|~~--__ |    | Wyoming|____  |~~~~~|--| |__ /_-'Penn.{,~Conn (RI)",
+  "|   |  ~~~|~~|        |    ~~\\ Iowa/  `-' |`~ |_____{/NJ     ",
+  "|   |     |  '---------, Nebr.\\----| IL|IN|OH,' ~/~\\,|`MD (DE)",
+  "',  \\ Nev.|Utah| Colo. |~~~~~~~|    \\  | ,'~~\\WV/ VA |       ",
+  " |Cal\\    |    |       | Kansas| MO  \\_-~ KY /`~___--\\       ",
+  " ',   \\  ,-----|-------+-------'_____/__----~~/N Car./        ",
+  "  '_   '\\|     |      |~~~|Okla.|    | Tenn._/-,~~-,/         ",
+  "    \\    |Ariz.| New  |   |_    |Ark./~~|~~\\    \\,/S Car.    ",
+  "     ~~~-'     | Mex. |     `~~~\\___| MS |AL | GA /           ",
+  "         '-,_  | _____|          |  /   | ,-'---~\\            ",
+  "             `~'~  \\    Texas    |LA`--,~~~~-~~,FL\\           ",
+  "                    \\/~\\      /~~~`---`         |  \\         ",
+  "                        \\    /                   \\  |         ",
+  "                         \\  |                     \\'          ",
+  "                          `~'                                  ",
 ];
+/* eslint-enable no-useless-escape */
 
-// Manual city → grid position lookup (row, col) calibrated to the ASCII art
+const MAP_COLS = US_MAP.reduce((max, l) => Math.max(max, l.length), 0);
+
+// Manual city → grid position lookup (row, col) calibrated to the art.
+// Positions verified by counting characters in each row.
 const CITY_POS = {
   // Origins
-  'Miami, FL':        [18, 59],
-  'Phoenix, AZ':      [13, 10],
-  'Sacramento, CA':   [10,  2],
-  'Houston, TX':      [17, 30],
-  'New Orleans, LA':  [16, 38],
-  'Charleston, SC':   [13, 57],
+  'Miami, FL':        [18, 52],
+  'Phoenix, AZ':      [13,  9],
+  'Sacramento, CA':   [ 9,  5],
+  'Houston, TX':      [16, 26],
+  'New Orleans, LA':  [16, 35],
+  'Charleston, SC':   [13, 51],
   // Destinations
-  'Minneapolis, MN':  [ 3, 37],
-  'Buffalo, NY':      [ 5, 52],
+  'Minneapolis, MN':  [ 3, 35],
+  'Buffalo, NY':      [ 4, 51],
   'Boise, ID':        [ 5,  9],
-  'Burlington, VT':   [ 2, 57],
-  // Waypoints
-  'Orlando, FL':      [16, 55],
-  'Jacksonville, FL': [15, 55],
-  'Atlanta, GA':      [14, 51],
-  'Nashville, TN':    [12, 45],
-  'Louisville, KY':   [10, 47],
-  'Indianapolis, IN': [ 8, 44],
-  'Chicago, IL':      [ 8, 41],
-  'Milwaukee, WI':    [ 4, 38],
-  'Savannah, GA':     [14, 54],
-  'Charlotte, NC':    [11, 54],
-  'Roanoke, VA':      [ 9, 55],
-  'Pittsburgh, PA':   [ 6, 50],
-  'Richmond, VA':     [ 9, 56],
-  'Washington, DC':   [ 8, 56],
-  'Philadelphia, PA': [ 7, 57],
-  'Hartford, CT':     [ 6, 58],
-  'New York, NY':     [ 6, 55],
+  'Burlington, VT':   [ 2, 55],
+  // Waypoints — Florida
+  'Orlando, FL':      [16, 49],
+  'Jacksonville, FL': [15, 48],
+  // Waypoints — Southeast
+  'Savannah, GA':     [14, 48],
+  'Atlanta, GA':      [14, 44],
+  'Charlotte, NC':    [11, 50],
+  'Raleigh, NC':      [11, 51],
+  'Charleston, SC':   [13, 51],
+  'Birmingham, AL':   [14, 40],
+  'Jackson, MS':      [14, 37],
+  // Waypoints — Mid-Atlantic / Northeast
+  'Roanoke, VA':      [ 9, 52],
+  'Richmond, VA':     [ 9, 53],
+  'Washington, DC':   [ 8, 54],
+  'Pittsburgh, PA':   [ 6, 48],
+  'Philadelphia, PA': [ 7, 53],
+  'New York, NY':     [ 5, 52],
+  'Hartford, CT':     [ 6, 56],
+  // Waypoints — Midwest
+  'Nashville, TN':    [12, 42],
+  'Knoxville, TN':    [12, 44],
+  'Louisville, KY':   [10, 44],
+  'Indianapolis, IN': [ 8, 42],
+  'Chicago, IL':      [ 8, 39],
+  'Milwaukee, WI':    [ 4, 36],
+  'Columbus, OH':     [ 8, 46],
+  'St. Louis, MO':    [10, 38],
+  'Memphis, TN':      [12, 38],
+  'Little Rock, AR':  [13, 36],
+  'Des Moines, IA':   [ 7, 33],
+  'Kansas City, MO':  [10, 35],
+  'Wichita, KS':      [10, 32],
+  'Omaha, NE':        [ 8, 31],
+  'North Platte, NE': [ 8, 28],
+  // Waypoints — South Central
+  'Dallas, TX':       [15, 27],
+  'Oklahoma City, OK':[12, 30],
+  'Amarillo, TX':     [12, 24],
+  // Waypoints — Mountain West
+  'Albuquerque, NM':  [13, 18],
   'Flagstaff, AZ':    [12, 12],
-  'Albuquerque, NM':  [13, 19],
-  'Amarillo, TX':     [12, 25],
-  'Oklahoma City, OK':[12, 33],
-  'Kansas City, MO':  [10, 37],
-  'Des Moines, IA':   [ 7, 35],
-  'St. Louis, MO':    [10, 40],
-  'Wichita, KS':      [ 9, 33],
   'Page, AZ':         [11, 12],
-  'Salt Lake City, UT':[ 9, 17],
-  'Twin Falls, ID':   [ 5, 11],
-  'Reno, NV':         [ 8,  6],
-  'Winnemucca, NV':   [ 7,  8],
+  'Salt Lake City, UT':[ 9, 16],
   'Cheyenne, WY':     [ 6, 22],
-  'North Platte, NE': [ 8, 26],
-  'Omaha, NE':        [ 8, 33],
-  'Dallas, TX':       [15, 30],
-  'Little Rock, AR':  [13, 38],
-  'Memphis, TN':      [12, 40],
-  'Columbus, OH':     [ 8, 48],
-  'Jackson, MS':      [14, 41],
-  'Birmingham, AL':   [13, 47],
-  'Knoxville, TN':    [12, 48],
-  'Raleigh, NC':      [11, 56],
+  'Twin Falls, ID':   [ 5, 12],
+  // Waypoints — Pacific
+  'Reno, NV':         [ 9,  8],
+  'Winnemucca, NV':   [ 7,  8],
 };
 
 function escapeHtml(str) {
@@ -110,7 +122,10 @@ export class ProgressMap {
     this.lastKey = key;
 
     // Deep copy the base map
-    const grid = US_MAP.map(line => line.padEnd(MAP_COLS).split(''));
+    const grid = US_MAP.map(line => {
+      const padded = line.padEnd(MAP_COLS);
+      return padded.split('');
+    });
 
     // Draw route lines between waypoints
     for (let i = 0; i < game.route.length - 1; i++) {

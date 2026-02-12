@@ -69,10 +69,12 @@ export function applyChoice(gameState, event, choiceIndex) {
   const outcome = choice.outcomes;
   const effects = { ...outcome.effects };
 
-  // Check for item bonus
+  // Check for item bonus — show itemNarrative when item helps
+  let usedItem = false;
   if (outcome.itemRequired) {
     const hasItem = gameState.inventory.some(item => item.id === outcome.itemRequired);
     if (hasItem && outcome.itemBonus) {
+      usedItem = true;
       for (const [resource, value] of Object.entries(outcome.itemBonus)) {
         effects[resource] = (effects[resource] || 0) + value;
       }
@@ -96,8 +98,12 @@ export function applyChoice(gameState, event, choiceIndex) {
     }
   }
 
+  const narrative = (usedItem && outcome.itemNarrative)
+    ? outcome.itemNarrative
+    : outcome.narrative;
+
   return {
-    narrative: outcome.narrative,
+    narrative,
     effects
   };
 }

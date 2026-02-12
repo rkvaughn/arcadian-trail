@@ -46,7 +46,10 @@ export const eventDefs = [
         text: 'Shelter in a sturdy building',
         outcomes: {
           effects: { food: -10, water: -8 },
-          narrative: 'You find an old fire station and ride out the storm. Two days lost, but the family is safe.'
+          itemRequired: 'tarp_shelter',
+          itemBonus: { food: 5, morale: 8 },
+          narrative: 'You find an old fire station and ride out the storm. Two days lost, but the family is safe.',
+          itemNarrative: 'The tarp seals the broken windows. Your shelter kit turns the fire station into a proper camp. Morale holds.'
         }
       },
       {
@@ -101,7 +104,10 @@ export const eventDefs = [
         text: 'Trade fuel for water',
         outcomes: {
           effects: { fuel: -15, water: 10 },
-          narrative: 'A roadside trader takes your fuel at a brutal exchange rate, but your canteens are full again.'
+          itemRequired: 'water_purifier',
+          itemBonus: { water: 10, fuel: 8 },
+          narrative: 'A roadside trader takes your fuel at a brutal exchange rate, but your canteens are full again.',
+          itemNarrative: 'You purify creek water on-site instead. The trader sees the purifier and offers fuel for a turn with it. Fair deal.'
         }
       },
       {
@@ -139,7 +145,10 @@ export const eventDefs = [
         text: 'Find shade and rest',
         outcomes: {
           effects: { water: -8, food: -8 },
-          narrative: 'An abandoned warehouse provides shelter. You lose a day but avoid heat stroke.'
+          itemRequired: 'insulation',
+          itemBonus: { water: 6, health: 5 },
+          narrative: 'An abandoned warehouse provides shelter. You lose a day but avoid heat stroke.',
+          itemNarrative: 'The thermal insulation keeps the cabin cool even parked. You barely touch the water reserves.'
         }
       }
     ]
@@ -156,7 +165,10 @@ export const eventDefs = [
         text: 'Take shelter in a ditch',
         outcomes: {
           effects: { health: -5, morale: -10 },
-          narrative: 'You lie flat in a drainage ditch, arms over your heads. The roar passes. You\'re alive but shaken.'
+          itemRequired: 'tarp_shelter',
+          itemBonus: { morale: 10, health: 5 },
+          narrative: 'You lie flat in a drainage ditch, arms over your heads. The roar passes. You\'re alive but shaken.',
+          itemNarrative: 'You stake the tarp over the ditch. Debris bounces off the cover. Everyone walks away unscratched.'
         }
       },
       {
@@ -206,7 +218,10 @@ export const eventDefs = [
         text: 'Conserve fuel and coast through',
         outcomes: {
           effects: { fuel: -5, food: -8 },
-          narrative: 'You hypermile through silent towns. No gas, no food resupply. But the road is clear.'
+          itemRequired: 'solar_panel',
+          itemBonus: { fuel: 8, morale: 5 },
+          narrative: 'You hypermile through silent towns. No gas, no food resupply. But the road is clear.',
+          itemNarrative: 'The solar panel trickle-charges the battery as you coast. You barely touch the fuel reserves. Smart packing.'
         }
       },
       {
@@ -357,7 +372,10 @@ export const eventDefs = [
         text: 'Crawl forward at low speed',
         outcomes: {
           effects: { fuel: -10, health: -8 },
-          narrative: 'Navigating by GPS alone, you inch through the storm. Sand clogs the air filter. But you gain ground.'
+          itemRequired: 'gas_mask',
+          itemBonus: { health: 8 },
+          narrative: 'Navigating by GPS alone, you inch through the storm. Sand clogs the air filter. But you gain ground.',
+          itemNarrative: 'Masks on, you inch through the wall of sand. Lungs stay clear. The air filter takes a beating but you don\'t.'
         }
       }
     ]
@@ -587,7 +605,10 @@ export const eventDefs = [
         text: 'Keep moving at a crawl',
         outcomes: {
           effects: { fuel: -25, health: -5 },
-          narrative: 'Heater blasting, wheels spinning. You burn a tank of gas to move ten miles without sliding off the edge.'
+          itemRequired: 'insulation',
+          itemBonus: { fuel: 12, health: 5 },
+          narrative: 'Heater blasting, wheels spinning. You burn a tank of gas to move ten miles without sliding off the edge.',
+          itemNarrative: 'The thermal insulation holds cabin heat without running the heater at full blast. You save fuel and keep warm.'
         }
       },
       {
@@ -625,7 +646,10 @@ export const eventDefs = [
         text: 'Scavenge the farmhouses',
         outcomes: {
           effects: { health: -15, water: 10 },
-          narrative: 'You find some bottled water, but inhale spores of the black rot. Your lungs burn for days.'
+          itemRequired: 'gas_mask',
+          itemBonus: { health: 12 },
+          narrative: 'You find some bottled water, but inhale spores of the black rot. Your lungs burn for days.',
+          itemNarrative: 'Masks on, you pick through the farmhouses. Bottled water, canned goods — and your lungs stay clean.'
         }
       }
     ]
@@ -680,7 +704,10 @@ export const eventDefs = [
         text: 'Navigate the service roads',
         outcomes: {
           effects: { water: -10, food: -5 },
-          narrative: 'Hours navigating back alleys to bypass the crush. Supplies consumed in the wait.'
+          itemRequired: 'radio',
+          itemBonus: { water: 8, food: 5 },
+          narrative: 'Hours navigating back alleys to bypass the crush. Supplies consumed in the wait.',
+          itemNarrative: 'The emergency radio picks up a trucker frequency with real-time route intel. You thread through in half the time.'
         }
       }
     ]
@@ -770,7 +797,10 @@ export const eventDefs = [
         text: 'Reverse and find another route',
         outcomes: {
           effects: { fuel: -18 },
-          narrative: 'You back up a mile, then cut down a side road. Hours lost, but nothing else.'
+          itemRequired: 'radio',
+          itemBonus: { fuel: 10 },
+          narrative: 'You back up a mile, then cut down a side road. Hours lost, but nothing else.',
+          itemNarrative: 'The radio crackles with a trucker warning about this stretch. You reroute early, saving fuel and nerves.'
         }
       }
     ]

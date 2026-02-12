@@ -288,7 +288,6 @@ body {
   background: var(--bg-card);
   border: 1px solid rgba(255,255,255,0.08);
   border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
   padding: 6px 12px;
   font-family: 'Courier New', monospace;
   font-size: 0.8em;
@@ -305,6 +304,25 @@ body {
 .ascii-snow    { color: #ffffff; }
 .ascii-rain    { color: #6688aa; }
 .ascii-road    { color: #8a8a6e; }
+
+/* === PROGRESS MAP === */
+.progress-map {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 6px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: clamp(7px, 1.4vw, 10px);
+  line-height: 1.2;
+  color: #3a3a4a;
+  white-space: pre;
+  overflow: hidden;
+  margin: 0;
+}
+.map-player  { color: var(--gold); font-weight: bold; }
+.map-visited { color: var(--green); }
+.map-route   { color: var(--text-dim); }
 
 /* === DAY/NIGHT CYCLE === */
 .ascii-display.time-dawn {

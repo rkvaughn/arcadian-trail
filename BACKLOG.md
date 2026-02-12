@@ -32,7 +32,7 @@
 | G4 | More event types (trade caravan, river crossing, etc.) | 5 | 2 | done |
 | G15 | Creative endings — 90s action movie taglines that vary based on perils encountered during the journey | 2 | 3 | done |
 | G16 | Make inventory matter at decision points — add more `itemRequired`/`itemBonus` branches to events so starting resource selections have visible impact; surface item usage in outcome narratives | 3 | 4 | done |
-| V7 | ASCII progress map — simplified US map outline showing route and current position, airline-flight-tracker style | 5 | 5 | |
+| V7 | ASCII progress map — simplified US map outline showing route and current position, airline-flight-tracker style | 5 | 5 | done |
 | G7 | Route branching at waypoints (safer vs. faster) | 5 | 6 | defer |
 
 ### Phase 3: Marquee Feature (8 pts)
@@ -99,6 +99,7 @@
 | C24 | 8 new event types — river crossing, iron caravan, flash freeze, blight, storm surge, refugee checkpoint, solar farm, abandoned hospital | 5 | 3 | 2026-02-11 |
 | C25 | Creative endings — 90s action taglines keyed to dominant peril type (win + lose pools) | 2 | 3 | 2026-02-11 |
 | C26 | Inventory matters — 18 item synergies across 28 events, all 10 items wired up, itemNarrative support | 3 | 3 | 2026-02-11 |
+| C27 | ASCII progress map — US outline with route/waypoint plotting, position tracker, color-coded markers | 5 | 3 | 2026-02-11 |
 
 ---
 

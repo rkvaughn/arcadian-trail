@@ -4,6 +4,7 @@ import { AsciiRenderer } from '../ui/asciiRenderer.js';
 import { Dashboard } from '../ui/dashboard.js';
 import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
+import { ProgressMap } from '../ui/progressMap.js';
 import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js';
 import { calculateScore } from './scoring.js';
 import { getRandomNarrative } from '../data/narratives.js';
@@ -35,6 +36,8 @@ class GameController {
     this.eventPanel = new EventPanel('event-panel', (choice) => {
       this.handleEventChoice(choice);
     });
+
+    this.progressMap = new ProgressMap(document.getElementById('progressMap'));
 
     this.screens.initTitle();
   }
@@ -158,6 +161,7 @@ class GameController {
     if (this.renderInterval) clearInterval(this.renderInterval);
     this.renderInterval = setInterval(() => {
       this.asciiRenderer.render(this.game, this.currentWeather);
+      this.progressMap.render(this.game);
     }, RENDER_INTERVAL_MS);
   }
 

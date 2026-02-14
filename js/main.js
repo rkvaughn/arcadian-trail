@@ -5,6 +5,8 @@ import { Dashboard } from '../ui/dashboard.js';
 import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
 import { ProgressMap } from '../ui/progressMap.js';
+import { ShelterDash } from '../ui/shelterDash.js';
+import { BarricadeRunner } from '../ui/barricadeRunner.js';
 import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js';
 import { calculateScore } from './scoring.js';
 import { getRandomNarrative } from '../data/narratives.js';
@@ -39,6 +41,11 @@ class GameController {
 
     this.progressMap = new ProgressMap(document.getElementById('progressMap'));
     this.familyRoster = document.getElementById('family-roster');
+
+    const displayEl = document.getElementById('asciiDisplay');
+    const infoBarEl = document.getElementById('asciiInfoBar');
+    this.shelterDash = new ShelterDash(displayEl, infoBarEl);
+    this.barricadeRunner = new BarricadeRunner(displayEl, infoBarEl);
 
     this.screens.initTitle();
   }
@@ -122,6 +129,10 @@ class GameController {
           break;
         }
 
+        case 'minigame':
+          this._launchMiniGame('SHELTER');
+          break;
+
         case 'event':
           clearInterval(this.travelInterval);
           this.travelInterval = null;
@@ -164,6 +175,13 @@ class GameController {
     const result = this.game.makeChoice(choice);
     if (!result) return;
 
+    // Choice triggers a mini-game instead of immediate effects
+    if (result.minigame) {
+      this.eventPanel.hide();
+      this._launchMiniGame(result.minigame);
+      return;
+    }
+
     this.dashboard.update(this.game.resources);
     this.updateRoster();
 
@@ -179,6 +197,63 @@ class GameController {
 
     if (result.death) {
       this.logger.log(`\u2620\uFE0F ${result.death.message}`, 'danger');
+    }
+  }
+
+  _launchMiniGame(type) {
+    clearInterval(this.travelInterval);
+    this.travelInterval = null;
+    clearInterval(this.renderInterval);
+    this.renderInterval = null;
+    this.game.state = STATES.MINIGAME;
+
+    const progress = this.game.getProgress();
+    const callback = (mgResult) => this._onMiniGameComplete(mgResult);
+
+    if (type === 'BARRICADE') {
+      this.logger.log('CRASH THE BARRICADE! Dodge obstacles and break free!', 'event');
+      this.barricadeRunner.start(progress, callback);
+    } else {
+      this.logger.log('SHELTER DASH! Find shelter before the storm hits!', 'event');
+      this.shelterDash.start(progress, callback, this.game.weatherRisk);
+    }
+  }
+
+  _onMiniGameComplete(result) {
+    // Apply effects to resources
+    if (result.effects) {
+      for (const [resource, value] of Object.entries(result.effects)) {
+        if (resource in this.game.resources) {
+          this.game.resources[resource] = Math.max(0, Math.min(100, this.game.resources[resource] + value));
+        }
+      }
+    }
+
+    // Set lastResult so the RESULT state has something to show
+    this.game.lastResult = result;
+    this.game.state = STATES.RESULT;
+
+    // Update UI
+    this.dashboard.update(this.game.resources);
+    this.updateRoster();
+
+    // Log outcome
+    this.logger.log(result.narrative, result.survived ? 'success' : 'danger');
+    this.game.addJournal(`Day ${this.game.day}: ${result.narrative}`);
+
+    // Show result in event panel (reuse existing result card UI)
+    this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
+
+    // Restart render loop so normal ASCII display resumes behind the result card
+    this.startRenderLoop();
+
+    // Check for game over from mini-game damage
+    const gameOver = this.game.checkGameOver();
+    if (gameOver) {
+      this.game.state = STATES.LOSE;
+      this.game.addJournal(`Day ${this.game.day}: ${gameOver}`);
+      this.logger.log(`GAME OVER: ${gameOver}`, 'danger');
+      setTimeout(() => this.endGame(false), 3000);
     }
   }
 

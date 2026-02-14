@@ -27,6 +27,7 @@ export const eventDefs = [
       },
       {
         text: 'Wait for the fire to pass',
+        minigame: 'SHELTER',
         outcomes: {
           effects: { water: -10, food: -8, morale: -10 },
           narrative: 'You shelter in a concrete underpass for two days. Supplies dwindle but the fire moves on.'
@@ -44,6 +45,7 @@ export const eventDefs = [
     choices: [
       {
         text: 'Shelter in a sturdy building',
+        minigame: 'SHELTER',
         outcomes: {
           effects: { food: -10, water: -8 },
           itemRequired: 'tarp_shelter',
@@ -78,6 +80,7 @@ export const eventDefs = [
       },
       {
         text: 'Find higher ground and wait',
+        minigame: 'SHELTER',
         outcomes: {
           effects: { food: -10, water: -5, morale: -8 },
           narrative: 'You camp on a hill for a day. The waters recede by morning, revealing a mud-caked road.'
@@ -143,6 +146,7 @@ export const eventDefs = [
       },
       {
         text: 'Find shade and rest',
+        minigame: 'SHELTER',
         outcomes: {
           effects: { water: -8, food: -8 },
           itemRequired: 'insulation',
@@ -163,6 +167,7 @@ export const eventDefs = [
     choices: [
       {
         text: 'Take shelter in a ditch',
+        minigame: 'SHELTER',
         outcomes: {
           effects: { health: -5, morale: -10 },
           itemRequired: 'tarp_shelter',
@@ -695,6 +700,7 @@ export const eventDefs = [
       },
       {
         text: 'Ram the side barricade',
+        minigame: 'BARRICADE',
         outcomes: {
           effects: { health: -20, fuel: -5 },
           narrative: 'Metal screeches. You smash through the fencing. The vehicle takes a beating, but you are free.'
@@ -788,6 +794,7 @@ export const eventDefs = [
       },
       {
         text: 'Floor it through the barricade',
+        minigame: 'BARRICADE',
         outcomes: {
           effects: { health: -18, fuel: -8 },
           narrative: 'Tires scream. Something hits the trunk. A window shatters. But you\'re through and gone.'

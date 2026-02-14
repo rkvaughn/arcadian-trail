@@ -36,10 +36,14 @@
 | G17 | Party member deaths — family members can die of dysentery (and other causes) during crisis events. Log iconic "[Name] has died of dysentery" messages. Track family roster, reduce family size, affect morale, trigger game over if leader dies. | 5 | 6 | done |
 | G7 | Route branching at waypoints (safer vs. faster) | 5 | 7 | defer |
 
-### Phase 3: Marquee Feature (8 pts)
-| # | Task | Points |
-|---|------|--------|
-| G12 | Shelter Dash mini-game — own `requestAnimationFrame` loop, `@` character dodges climate hazards, collects supplies, reaches shelter. Prototype standalone first, then integrate. | 8 |
+### Phase 3: Marquee Features (31 pts)
+| # | Task | Points | Priority | Status |
+|---|------|--------|----------|--------|
+| G12 | Shelter Dash mini-game — original side-scrolling runner prototype | 8 | 1 | done |
+| G18 | Crash the Barricade — rename existing runner to barricade escape game. Speed-based collision (obstacles slow you down, stall = caught). Win/lose ASCII scene cards. Trigger from "ram the barricade" event choices. | 3 | 2 | done |
+| G19 | New Shelter Dash — non-scrolling 2D field, player finds randomly-placed shelters. Exposed = rapid weather-dependent damage (smoke/fire/drought/heat from weather API). In shelter = safe. Survive the timer. Trigger from "find shelter" choices. | 5 | 3 | done |
+| G20 | Mini-game choice triggers — add `minigame` property to eventDefs choices, wire through events.js → main.js to launch correct mini-game from player decisions. | 2 | 4 | done |
+| G21 | ASCII event scene cards — first-person POV ASCII art per event (e.g., Iron Caravan approaching). Replace driving scene during EVENT/RESULT states. Fallback to perilType generic scene. | 5 | 5 | done |
 
 ### Phase 4: Polish & Utility (13 pts)
 | # | Task | Points |

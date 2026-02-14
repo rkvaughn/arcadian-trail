@@ -305,6 +305,12 @@ body {
 .ascii-rain    { color: #6688aa; }
 .ascii-road    { color: #8a8a6e; }
 
+/* Shelter Dash mini-game */
+.ascii-player     { color: var(--gold); font-weight: bold; text-shadow: 0 0 4px var(--gold); }
+.ascii-player-hit { color: var(--red); font-weight: bold; }
+.ascii-dash-health { color: var(--green); }
+.ascii-shelter    { color: var(--gold); font-weight: bold; }
+
 /* === PROGRESS MAP === */
 .progress-map {
   background: var(--bg-card);

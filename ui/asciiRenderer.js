@@ -5,6 +5,7 @@ import {
   vehicleCol,
   weatherEffects,
   eventScenes,
+  eventIdScenes,
 } from '../data/asciiArt.js';
 
 const SCENE_WIDTH = 70;
@@ -72,7 +73,7 @@ export class AsciiRenderer {
       (game.state === STATES.EVENT || game.state === STATES.RESULT) &&
       game.currentEvent
     ) {
-      grid = this.getEventGrid(game.currentEvent.perilType);
+      grid = this.getEventGrid(game.currentEvent);
       isEvent = true;
     } else {
       grid = this.getTerrainGrid(game);
@@ -137,8 +138,12 @@ export class AsciiRenderer {
     return this.cachedTerrainGrid.map(line => line.slice());
   }
 
-  getEventGrid(perilType) {
-    const scene = eventScenes[perilType] || eventScenes.positive;
+  getEventGrid(event) {
+    // Per-event first-person scene, fall back to perilType generic
+    if (eventIdScenes[event.id]) {
+      return eventIdScenes[event.id].map(line => line.slice());
+    }
+    const scene = eventScenes[event.perilType] || eventScenes.positive;
     return scene.map(line => line.slice());
   }
 

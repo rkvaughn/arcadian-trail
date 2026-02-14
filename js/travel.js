@@ -112,11 +112,18 @@ export function travelTick(gameState) {
   if (itemPassives.positiveBoost) {
     eventChance *= 0.9;
   }
-  const triggerEvent = Math.random() < eventChance;
+  let triggerEvent = Math.random() < eventChance;
+
+  // 12% of would-be events become a mini-game instead
+  let triggerMiniGame = false;
+  if (triggerEvent && Math.random() < 0.12) {
+    triggerEvent = false;
+    triggerMiniGame = true;
+  }
 
   // Check for roadside encounter (non-modal, minor effects)
   let encounter = null;
-  if (!triggerEvent && Math.random() < ENCOUNTER_CHANCE) {
+  if (!triggerEvent && !triggerMiniGame && Math.random() < ENCOUNTER_CHANCE) {
     encounter = selectEncounter(terrain);
     if (encounter) {
       for (const [resource, value] of Object.entries(encounter.effects)) {
@@ -137,6 +144,7 @@ export function travelTick(gameState) {
     arrived: false,
     changes,
     triggerEvent,
+    triggerMiniGame,
     encounter,
     reachedWaypoint,
     waypointName: reachedWaypoint ? nextWaypoint.name : currentWaypoint.name,

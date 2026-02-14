@@ -10,6 +10,7 @@ export const STATES = {
   EVENT: 'EVENT',
   DECISION: 'DECISION',
   RESULT: 'RESULT',
+  MINIGAME: 'MINIGAME',
   WIN: 'WIN',
   LOSE: 'LOSE'
 };
@@ -97,6 +98,12 @@ export class Game {
       this.addJournal(`Day ${this.day}: Reached ${result.waypointName}. Terrain: ${result.terrain}.`);
     }
 
+    if (result.triggerMiniGame) {
+      this.state = STATES.MINIGAME;
+      this.addJournal(`Day ${this.day}: A sudden storm forces a dash for shelter!`);
+      return { type: 'minigame' };
+    }
+
     if (result.triggerEvent) {
       const terrain = this.route[this.waypointIndex].terrain;
       this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes);
@@ -147,9 +154,9 @@ export class Game {
     return { type: 'result', ...result };
   }
 
-  // Continue traveling after viewing event result
+  // Continue traveling after viewing event result or mini-game
   continueJourney() {
-    if (this.state === STATES.RESULT) {
+    if (this.state === STATES.RESULT || this.state === STATES.MINIGAME) {
       this.currentEvent = null;
       this.lastResult = null;
       this.state = STATES.TRAVELING;

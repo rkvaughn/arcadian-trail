@@ -66,6 +66,11 @@ export function applyChoice(gameState, event, choiceIndex) {
   const choice = event.choices[choiceIndex];
   if (!choice) return { narrative: 'Nothing happens.', effects: {} };
 
+  // If this choice triggers a mini-game, signal the controller instead of applying effects
+  if (choice.minigame) {
+    return { type: 'minigame', minigame: choice.minigame, narrative: '', effects: {} };
+  }
+
   const outcome = choice.outcomes;
   const effects = { ...outcome.effects };
 

@@ -10,7 +10,7 @@
 
 | # | Task | Points | Notes |
 |---|------|--------|-------|
-| — | *(none — Phase 2 in progress)* | — | — |
+| — | *(none)* | — | — |
 
 ---
 
@@ -45,7 +45,48 @@
 | G20 | Mini-game choice triggers — add `minigame` property to eventDefs choices, wire through events.js → main.js to launch correct mini-game from player decisions. | 2 | 4 | done |
 | G21 | ASCII event scene cards — first-person POV ASCII art per event (e.g., Iron Caravan approaching). Replace driving scene during EVENT/RESULT states. Fallback to perilType generic scene. | 5 | 5 | done |
 
-### Phase 4: Polish & Utility (13 pts)
+### Phase 3b: Mini-Game Polish (5 pts)
+| # | Task | Points | Priority | Status |
+|---|------|--------|----------|--------|
+| G22 | Shelter Dash improvements — variable-quality shelters with visual distinction (sturdy vs. fragile), shelters can collapse forcing player to find another, display player health bar during mini-game | 5 | 1 | |
+
+### Phase 4A: Visual Overhaul — 1985 Oregon Trail Color Imagery (10 pts)
+
+> Replace dark-terminal monochrome aesthetic with terrain-differentiated color panels in the style of the 1985 Apple IIe Oregon Trail. Sky/ground color identity per terrain type; weather tinting on top; event scenes color-themed by peril type.
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| P2-V1 | Terrain color palette system | 3 | 1 | Add `data-terrain` attribute to `#ascii-display`; define CSS custom properties per terrain in `style.css`; set attribute in `AsciiRenderer.render()` |
+| P2-V2 | Sky/ground background panels | 3 | 2 | Split display into sky rows (0–11) and ground rows (12–17); apply terrain-scoped background colors via CSS vars |
+| P2-V3 | Weather color tints | 2 | 3 | Rain → darken sky 20%; heat → orange ground cast; snow → lighten all vars; wire into existing weather overlay logic |
+| P2-V4 | Event scene card color theming | 2 | 4 | Apply perilType-scoped palettes during EVENT/RESULT states (wildfire → red/orange, flood → blue, freeze → ice) |
+
+**Terrain color targets (Apple IIe composite palette-inspired):**
+
+| Terrain | Sky | Ground | Accent |
+|---------|-----|--------|--------|
+| Plains / grassland | `#87ceeb` | `#4a7c2f` | `#8b6914` |
+| Desert | `#d4a843` | `#c4873a` | `#8b4513` |
+| Mountain | `#b0c4de` | `#6b7280` | `#4a5568` |
+| Forest | `#7ab648` | `#2d5a1b` | `#5c4a2a` |
+| Coastal | `#4a9eda` | `#1a5c7a` | `#c2b280` |
+| Urban | `#9ca3af` | `#4b5563` | `#6b7280` |
+| Arctic | `#e0f2fe` | `#bfdbfe` | `#93c5fd` |
+| Swamp | `#78716c` | `#374151` | `#6b8e23` |
+
+### Phase 4B: Strategic Gameplay Depth (17 pts)
+
+> Add meaningful long-arc decision-making: route branching with tradeoffs, a cross-event flag system for consequence chaining, and faction reputation that accumulates across encounters.
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| P2-G1 | Route branching at waypoints (G7) | 5 | 1 | WAYPOINT state at each city; Safe Route (+20% fuel cost) vs. Fast Route (+event chance); implement in `js/travel.js` + new state in `js/game.js` |
+| P2-G2 | Game flag system | 2 | 2 | Add `game.flags = {}` to Game class; add `setsFlag` to eventDef choices; check `game.flags[x]` in event `conditions` |
+| P2-G3 | Multi-stage linked events (2–3 pairs) | 3 | 3 | Author 2–3 event pairs where choice A sets a flag → Event B fires later with payoff narrative. Use flag system from P2-G2. |
+| P2-G4 | Faction reputation (checkpoints / caravans) | 5 | 4 | Add `game.reputation = {}` keyed by faction; expose in dashboard; wire gates into iron caravan + refugee checkpoint events |
+| P2-G5 | Item consumable limits | 2 | 5 | Add `maxUses: N` to items in `data/items.js`; track `game.itemUses = {}` in Game; enforce in event resolution |
+
+### Phase 4C: Polish & Utility (13 pts)
 | # | Task | Points |
 |---|------|--------|
 | G8 | Save/load game state to localStorage (build early to avoid serialization debt) | 3 |

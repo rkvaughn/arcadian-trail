@@ -34,8 +34,8 @@ Build a side-scrolling or decision-tree-based game where players choose a starti
 - Use HTML5 canvas or Phaser.js for 2D side-scroller OR Twine/Ink-style decision-tree for text-based version
 - Eventually connect to a leaderboard or scoring system (based on survival, adaptation success, etc.)
 
-## ChatGPT Task Types
-Ask ChatGPT to:
+## LLM Task Types
+Ask claude or other llm to:
 1. Write modular game logic in JavaScript, including:
    - Character setup
    - Event generation
@@ -53,7 +53,6 @@ Ask ChatGPT to:
 - JavaScript (game logic)
 - HTML/CSS (frontend)
 - OpenWeatherMap / NASA POWER / NOAA APIs (climate data)
-- Cursor IDE (code development)
 - Supabase / Firebase / local storage (early backend)
 - Phaser.js or pure canvas (side scroller)
 - Twine or Ink (alt: text-based version)

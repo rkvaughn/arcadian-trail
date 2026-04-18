@@ -96,7 +96,15 @@ export class AsciiRenderer {
     const html = this.colorize(grid, isEvent, weatherIcon);
     this.display.innerHTML = html;
 
-    // Day/night cycle — apply time-of-day CSS class
+    // Oregon Trail color theming — set data-terrain so CSS gradient picks up
+    // the right sky/ground palette. Event scenes use perilType for drama.
+    const wp = game.getCurrentWaypoint();
+    const currentTerrain = wp ? wp.terrain : 'plains';
+    this.display.dataset.terrain = (isEvent && game.currentEvent)
+      ? `event-${game.currentEvent.perilType}`
+      : currentTerrain;
+
+    // Day/night cycle — apply time-of-day CSS class (drives filter tint)
     const phase = TIME_PHASES[Math.floor(game.day / DAYS_PER_PHASE) % TIME_PHASES.length];
     for (const p of TIME_PHASES) {
       this.display.classList.toggle(`time-${p}`, p === phase);

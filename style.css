@@ -18,6 +18,127 @@
   --yellow: #f39c12;
   --red: #e74c3c;
   --radius: 8px;
+
+  /* Terrain palette defaults (plains) */
+  --terrain-sky:    #7ec8e3;
+  --terrain-ground: #5a8a2a;
+  --terrain-text:   #1a0a00;
+}
+
+/* ── TERRAIN PALETTES ───────────────────────────────────────────────────── */
+/* Set by data-terrain attribute in asciiRenderer.js                        */
+
+[data-terrain="plains"] {
+  --terrain-sky:    #7ec8e3;
+  --terrain-ground: #5a8a2a;
+  --terrain-text:   #1a0a00;
+}
+[data-terrain="desert"] {
+  --terrain-sky:    #dba96e;
+  --terrain-ground: #b8722a;
+  --terrain-text:   #1a0500;
+}
+[data-terrain="mountain"] {
+  --terrain-sky:    #6a8fb5;
+  --terrain-ground: #5a6270;
+  --terrain-text:   #0f0f18;
+}
+[data-terrain="forest"] {
+  --terrain-sky:    #4a8a30;
+  --terrain-ground: #2a4a15;
+  --terrain-text:   #e0d8b0;
+}
+[data-terrain="coastal"] {
+  --terrain-sky:    #3a8ac0;
+  --terrain-ground: #1a4a6a;
+  --terrain-text:   #d0e8f0;
+}
+[data-terrain="urban"] {
+  --terrain-sky:    #7a8090;
+  --terrain-ground: #3a3f4a;
+  --terrain-text:   #c8d0d8;
+}
+[data-terrain="arctic"] {
+  --terrain-sky:    #c0ddf0;
+  --terrain-ground: #a0c0e0;
+  --terrain-text:   #1a2a3a;
+}
+[data-terrain="swamp"] {
+  --terrain-sky:    #5a6050;
+  --terrain-ground: #2a3020;
+  --terrain-text:   #c0c8a0;
+}
+[data-terrain="wetland"] {
+  --terrain-sky:    #5a7858;
+  --terrain-ground: #2a4828;
+  --terrain-text:   #d0e0b0;
+}
+[data-terrain="hills"] {
+  --terrain-sky:    #82c8e0;
+  --terrain-ground: #4a7820;
+  --terrain-text:   #1a0a00;
+}
+[data-terrain="valley"] {
+  --terrain-sky:    #60a860;
+  --terrain-ground: #2a5818;
+  --terrain-text:   #e8f0c8;
+}
+
+/* ── EVENT SCENE PALETTES ───────────────────────────────────────────────── */
+/* data-terrain is set as "event-{perilType}" by asciiRenderer.js           */
+
+/* Fire / heat / drought — red-orange sky, deep red ground */
+[data-terrain="event-wildfire"],
+[data-terrain="event-heat"],
+[data-terrain="event-drought"] {
+  --terrain-sky:    #cc4400;
+  --terrain-ground: #7a1a00;
+  --terrain-text:   #ffe0a0;
+}
+/* Flood / water surge — dark ocean blue */
+[data-terrain="event-flood"] {
+  --terrain-sky:    #1a4a8a;
+  --terrain-ground: #0a1a3a;
+  --terrain-text:   #a0d0f0;
+}
+/* Storms — charcoal with blue-grey cast */
+[data-terrain="event-hurricane"],
+[data-terrain="event-tornado"] {
+  --terrain-sky:    #2a2a3a;
+  --terrain-ground: #1a1a28;
+  --terrain-text:   #c0c8d8;
+}
+/* Flash freeze — pale ice blue */
+[data-terrain="event-freeze"],
+[data-terrain="event-blizzard"] {
+  --terrain-sky:    #b0c8e8;
+  --terrain-ground: #8ab0d0;
+  --terrain-text:   #0a1020;
+}
+/* Positive / supply / settlement — lush green */
+[data-terrain="event-positive"] {
+  --terrain-sky:    #5a9a30;
+  --terrain-ground: #3a7a20;
+  --terrain-text:   #e0f0c0;
+}
+/* Infrastructure / mechanical — concrete grey */
+[data-terrain="event-infrastructure"],
+[data-terrain="event-mechanical"] {
+  --terrain-sky:    #7a8090;
+  --terrain-ground: #3a3f4a;
+  --terrain-text:   #c8d0d8;
+}
+/* Health / medical — deep red tint */
+[data-terrain="event-health"] {
+  --terrain-sky:    #5a1a20;
+  --terrain-ground: #2a0a0e;
+  --terrain-text:   #f0c0c0;
+}
+/* Social — warm amber */
+[data-terrain="event-social"] {
+  --terrain-sky:    #8a6a20;
+  --terrain-ground: #4a3810;
+  --terrain-text:   #f0e0a0;
 }
 
 body {
@@ -269,10 +390,19 @@ body {
 .ascii-display {
   width: 100%;
   border-radius: var(--radius) var(--radius) 0 0;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 3px solid #1a0a00;
   border-bottom: none;
-  background: #0a0a14;
-  color: #c0c8d8;
+  /* Terrain sky/ground gradient — split at row 12 of 18 (≈ 66%) */
+  background: linear-gradient(
+    to bottom,
+    var(--terrain-sky)    0%,
+    var(--terrain-sky)    62%,
+    var(--terrain-ground) 72%,
+    var(--terrain-ground) 100%
+  );
+  /* Smooth terrain transitions */
+  transition: background 0.5s ease;
+  color: var(--terrain-text);
   font-family: 'Courier New', monospace;
   font-size: clamp(8px, 1.8vw, 12.5px);
   line-height: 1.25;
@@ -285,25 +415,29 @@ body {
 }
 
 .ascii-info-bar {
-  background: var(--bg-card);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-top: none;
+  background: #1a0a00;
+  border: 3px solid #1a0a00;
+  border-top: 2px solid #3a1a00;
+  border-bottom: none;
   padding: 6px 12px;
   font-family: 'Courier New', monospace;
   font-size: 0.8em;
-  color: var(--text-dim);
+  color: #c8aa70;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* === ASCII COLOR HIGHLIGHTS === */
-.ascii-vehicle { color: #ffd700; }
-.ascii-fire    { color: #e94560; }
-.ascii-water   { color: #45b7d1; }
-.ascii-snow    { color: #ffffff; }
-.ascii-rain    { color: #6688aa; }
-.ascii-road    { color: #8a8a6e; }
+/* These override the terrain text color for specific scene elements.      */
+/* Must stay legible on both light (plains/arctic) and dark (swamp/urban)  */
+/* terrain backgrounds — use high-contrast values + text-shadow for pop.  */
+.ascii-vehicle { color: #ffd700; font-weight: bold; text-shadow: 1px 1px 0 rgba(0,0,0,0.6); }
+.ascii-fire    { color: #ff4500; text-shadow: 0 0 6px #ff6600; }
+.ascii-water   { color: #1a4fa0; font-weight: bold; }
+.ascii-snow    { color: #f0f8ff; text-shadow: 0 0 3px rgba(0,0,0,0.4); }
+.ascii-rain    { color: #2a5580; }
+.ascii-road    { color: #2d1800; font-weight: bold; }
 
 /* Shelter Dash mini-game */
 .ascii-player     { color: var(--gold); font-weight: bold; text-shadow: 0 0 4px var(--gold); }
@@ -313,15 +447,15 @@ body {
 
 /* === PROGRESS MAP === */
 .progress-map {
-  background: var(--bg-card);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #120800;
+  border: 3px solid #1a0a00;
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);
   padding: 8px 12px;
   font-family: 'Courier New', monospace;
   font-size: clamp(6px, 1.2vw, 9px);
   line-height: 1.15;
-  color: #4a5568;
+  color: #4a5040;
   white-space: pre;
   overflow: hidden;
   margin: 0;
@@ -331,20 +465,18 @@ body {
 .map-route   { color: var(--accent); }
 
 /* === DAY/NIGHT CYCLE === */
+/* Filter tints preserve the terrain gradient — no background/color override. */
 .ascii-display.time-dawn {
-  color: #d4a87c;
-  background: #0e0a0a;
+  filter: sepia(35%) brightness(0.80) saturate(0.85);
 }
 .ascii-display.time-day {
-  /* default palette — no override needed */
+  filter: none;
 }
 .ascii-display.time-dusk {
-  color: #b08a6e;
-  background: #0c0810;
+  filter: sepia(55%) brightness(0.72) hue-rotate(12deg) saturate(0.9);
 }
 .ascii-display.time-night {
-  color: #6a7a9a;
-  background: #06060e;
+  filter: brightness(0.28) saturate(0.5) hue-rotate(200deg);
 }
 
 .game-side {

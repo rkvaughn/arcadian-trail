@@ -388,28 +388,16 @@ body {
 }
 
 .ascii-display {
+  /* Canvas fills container width; height scales proportionally (320×180 native) */
+  display: block;
   width: 100%;
+  height: auto;
   border-radius: var(--radius) var(--radius) 0 0;
   border: 3px solid #1a0a00;
   border-bottom: none;
-  /* Terrain sky/ground gradient — split at row 12 of 18 (≈ 66%) */
-  background: linear-gradient(
-    to bottom,
-    var(--terrain-sky)    0%,
-    var(--terrain-sky)    62%,
-    var(--terrain-ground) 72%,
-    var(--terrain-ground) 100%
-  );
-  /* Smooth terrain transitions */
-  transition: background 0.5s ease;
-  color: var(--terrain-text);
-  font-family: 'Courier New', monospace;
-  font-size: clamp(8px, 1.8vw, 12.5px);
-  line-height: 1.25;
-  padding: 10px 12px;
-  margin: 0;
-  overflow-x: auto;
-  white-space: pre;
+  /* Nearest-neighbor scaling keeps pixels crisp (no blurring) */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
   user-select: none;
   -webkit-user-select: none;
 }

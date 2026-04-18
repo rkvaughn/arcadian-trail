@@ -1,6 +1,6 @@
 import { Game, STATES } from './game.js';
 import { ScreenManager } from '../ui/screens.js';
-import { AsciiRenderer } from '../ui/asciiRenderer.js';
+import { PixelRenderer } from '../ui/pixelRenderer.js';
 import { Dashboard } from '../ui/dashboard.js';
 import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
@@ -28,7 +28,7 @@ class GameController {
       this.beginGame(origin, dest, name, trait, size, items);
     });
 
-    this.asciiRenderer = new AsciiRenderer(
+    this.asciiRenderer = new PixelRenderer(
       document.getElementById('asciiDisplay'),
       document.getElementById('asciiInfoBar')
     );

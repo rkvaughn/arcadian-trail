@@ -1,3 +1,13 @@
+/**
+ * js/travel.js — Per-tick travel engine
+ *
+ * Computes resource burn, distance progress, waypoint advancement,
+ * roadside encounters, and family deaths for each travel tick.
+ *
+ * SSP climate multipliers (game.sspMultipliers) scale fuel and health
+ * burn rates based on the selected year/scenario. See data/ssp.js and
+ * REFERENCES.md for derivations.
+ */
 import { getFamilyPassives } from './characters.js';
 import { encounterDefs, ENCOUNTER_CHANCE } from '../data/encounterDefs.js';
 
@@ -29,13 +39,43 @@ const BASE_MILES_PER_DAY = 120;
 // Event trigger base probability per travel tick
 const EVENT_BASE_CHANCE = 0.30;
 
+/**
+ * Advance one tick of travel. Mutates gameState.resources in place.
+ *
+ * @param {object} gameState — full Game instance
+ * @param {object} gameState.resources       — { fuel, water, food, health, morale }
+ * @param {array}  gameState.route           — array of waypoint objects
+ * @param {number} gameState.waypointIndex   — current position in route
+ * @param {array}  gameState.family          — array of family member objects
+ * @param {array}  gameState.inventory       — selected item definitions
+ * @param {object} gameState.weatherRisk     — live risk scores from OpenWeatherMap
+ * @param {object} gameState.sspMultipliers  — scenario multipliers from data/ssp.js;
+ *                                             applies fuelBurn and healthDrain scalars
+ * @returns {object} tick result — { arrived, gameOver, reachedWaypoint, triggerEvent,
+ *                                   triggerMiniGame, encounter, death, terrain, milesPerDay }
+ */
 export function travelTick(gameState) {
-  const { resources, route, waypointIndex, family, inventory, weatherRisk } = gameState;
+  const { resources, route, waypointIndex, family, inventory, weatherRisk, sspMultipliers } = gameState;
   const currentWaypoint = route[waypointIndex];
   const nextWaypoint = route[waypointIndex + 1];
 
   if (!nextWaypoint) {
     return { arrived: true };
+  }
+
+  // Process multi-tick active hazard (e.g., heatwave that persists across travel days)
+  // Duration is set by game.js using sspMultipliers.heatwaveDuration (Martinez-Villalobos et al. 2025)
+  if (gameState.activeHazard) {
+    const hazard = gameState.activeHazard;
+    for (const [resource, amount] of Object.entries(hazard.drainPerTick)) {
+      if (resource in resources) {
+        resources[resource] = Math.max(0, Math.min(100, resources[resource] + amount));
+      }
+    }
+    hazard.ticksRemaining -= 1;
+    if (hazard.ticksRemaining <= 0) {
+      gameState.activeHazard = null;
+    }
   }
 
   const terrain = currentWaypoint.terrain;
@@ -56,6 +96,13 @@ export function travelTick(gameState) {
     // Family trait modifiers
     if (resource === 'fuel') rate *= familyPassives.fuelDrain;
     if (resource === 'health') rate *= familyPassives.healthDrain;
+
+    // SSP climate multipliers — applied after trait modifiers
+    // Source: data/ssp.js; see REFERENCES.md for derivations
+    if (sspMultipliers) {
+      if (resource === 'fuel')   rate *= sspMultipliers.fuelBurn;
+      if (resource === 'health') rate *= sspMultipliers.healthDrain;
+    }
 
     // Item passive modifiers (multiplier type)
     if (itemPassives[resource] && typeof itemPassives[resource] === 'number' && itemPassives[resource] < 1) {

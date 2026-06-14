@@ -393,27 +393,32 @@ body {
   width: 100%;
   height: auto;
   border-radius: var(--radius) var(--radius) 0 0;
-  border: 3px solid #1a0a00;
+  /* V2: border tints to terrain sky color — vars set by [data-terrain] on .game-layout */
+  border: 3px solid var(--terrain-sky);
   border-bottom: none;
   /* Nearest-neighbor scaling keeps pixels crisp (no blurring) */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   user-select: none;
   -webkit-user-select: none;
+  /* V3: smooth filter transitions between terrain/time/weather states */
+  transition: filter 0.7s ease, border-color 0.5s ease;
 }
 
 .ascii-info-bar {
-  background: #1a0a00;
-  border: 3px solid #1a0a00;
-  border-top: 2px solid #3a1a00;
+  /* V2: info bar adopts terrain ground color — completes the sky/ground frame */
+  background: var(--terrain-ground);
+  border: 3px solid var(--terrain-ground);
+  border-top: 2px solid var(--terrain-sky);
   border-bottom: none;
   padding: 6px 12px;
   font-family: 'Courier New', monospace;
   font-size: 0.8em;
-  color: #c8aa70;
+  color: var(--terrain-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.5s ease, border-color 0.5s ease, color 0.4s ease;
 }
 
 /* === ASCII COLOR HIGHLIGHTS === */
@@ -433,39 +438,45 @@ body {
 .ascii-dash-health { color: var(--green); }
 .ascii-shelter    { color: var(--gold); font-weight: bold; }
 
-/* === PROGRESS MAP === */
+/* === PROGRESS MAP (color overlay) === */
 .progress-map {
-  background: #120800;
   border: 3px solid #1a0a00;
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);
-  padding: 8px 12px;
-  font-family: 'Courier New', monospace;
-  font-size: clamp(6px, 1.2vw, 9px);
-  line-height: 1.15;
-  color: #4a5040;
-  white-space: pre;
   overflow: hidden;
   margin: 0;
+  padding: 0;
+  background: #2a1a08; /* fallback while image loads */
 }
-.map-player  { color: var(--gold); font-weight: bold; text-shadow: 0 0 4px var(--gold); }
-.map-visited { color: var(--green); }
-.map-route   { color: var(--accent); }
 
-/* === DAY/NIGHT CYCLE === */
-/* Filter tints preserve the terrain gradient — no background/color override. */
-.ascii-display.time-dawn {
-  filter: sepia(35%) brightness(0.80) saturate(0.85);
+/* Overlay container holds img + canvas stacked */
+.map-overlay-container {
+  position: relative;
+  display: block;
+  width: 100%;
+  line-height: 0; /* prevent gap below img */
 }
-.ascii-display.time-day {
-  filter: none;
+
+.map-bg-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0;
 }
-.ascii-display.time-dusk {
-  filter: sepia(55%) brightness(0.72) hue-rotate(12deg) saturate(0.9);
+
+.map-overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* clicks pass through to game UI */
 }
-.ascii-display.time-night {
-  filter: brightness(0.28) saturate(0.5) hue-rotate(200deg);
-}
+
+/* === DAY/NIGHT + WEATHER FILTERS === */
+/* V3: filters are now composed in pixelRenderer._timeFilter() + _weatherFilter()
+   and applied as canvas.style.filter. CSS class-based filters removed — they
+   could not be combined with weather tints on the same element. */
 
 .game-side {
   flex: 1;
@@ -534,6 +545,44 @@ body {
   color: var(--text-dim);
 }
 
+/* === SCENARIO BADGE === */
+.scenario-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78em;
+  font-weight: bold;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 5px 0 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 12px;
+}
+.scenario-ssp {
+  font-weight: bold;
+}
+.scenario-sep {
+  color: rgba(255,255,255,0.25);
+}
+.scenario-year {
+  color: var(--text-dim);
+}
+.scenario-difficulty {
+  font-weight: bold;
+}
+
+/* === ACTIVE HAZARD INDICATOR === */
+.hazard-indicator {
+  font-size: 0.78em;
+  color: #f39c12;
+  background: rgba(243, 156, 18, 0.1);
+  border: 1px solid rgba(243, 156, 18, 0.3);
+  border-radius: 4px;
+  padding: 5px 8px;
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+}
+
 /* === FAMILY ROSTER === */
 .family-roster {
   background: var(--bg-card);
@@ -591,6 +640,21 @@ body {
   border-radius: var(--radius);
   border: 1px solid var(--accent);
   box-shadow: 0 0 20px var(--accent-glow);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* V4: event panel theming — keyed to peril type via [data-terrain] on .game-layout.
+   terrain-text is always chosen for contrast on each event's background palette. */
+[data-terrain^="event-"] .event-panel.active {
+  border-color: var(--terrain-text);
+  box-shadow: 0 0 24px var(--terrain-sky);
+}
+[data-terrain^="event-"] .event-name {
+  color: var(--terrain-text);
+}
+[data-terrain^="event-"] .choice-btn:hover {
+  border-color: var(--terrain-text);
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .event-card {
@@ -878,6 +942,276 @@ body {
 .feedback-status {
   font-size: 0.8em;
   color: var(--green);
+}
+
+/* === YEAR SELECTOR === */
+.year-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.year-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 16px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  flex: 1;
+  min-width: 90px;
+  text-align: center;
+  transition: all 0.15s;
+}
+.year-option:hover {
+  background: rgba(233, 69, 96, 0.1);
+}
+.year-option input[type="radio"] {
+  display: none;
+}
+.year-option:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(233, 69, 96, 0.12);
+}
+.year-value {
+  font-size: 1.3em;
+  font-weight: bold;
+  color: var(--text);
+}
+.year-label {
+  font-size: 0.75em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.year-tagline {
+  font-size: 0.78em;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* === SSP SCENARIO SELECTOR === */
+.ssp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ssp-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ssp-option:hover {
+  background: rgba(233, 69, 96, 0.08);
+}
+.ssp-option input[type="radio"] {
+  display: none;
+}
+.ssp-option:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(233, 69, 96, 0.1);
+}
+.ssp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.ssp-name {
+  font-weight: bold;
+  color: var(--text);
+  font-size: 0.95em;
+}
+.ssp-meta {
+  color: var(--text-dim);
+  font-size: 0.78em;
+}
+.ssp-desc {
+  color: var(--text-dim);
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
+/* === RESEARCH SUMMARY BUTTON === */
+.btn-research {
+  display: block;
+  width: 100%;
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.88em;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 20px;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+.btn-research:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(233, 69, 96, 0.08);
+}
+
+/* === RESEARCH SUMMARY PANEL === */
+.research-summary-section {
+  background: var(--bg-card);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius);
+  padding: 24px 24px 16px;
+  margin-bottom: 20px;
+  font-size: 0.88em;
+  line-height: 1.7;
+}
+
+.research-summary {}
+
+.research-scenario-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.research-ssp-badge {
+  border: 2px solid;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.research-scenario-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.research-scenario-name {
+  font-weight: bold;
+  color: var(--text);
+  font-size: 1.05em;
+}
+.research-scenario-year {
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+.research-delta-t {
+  color: var(--text-dim);
+  font-size: 0.82em;
+  font-style: italic;
+}
+
+.research-narrative {
+  color: var(--text-dim);
+  font-style: italic;
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(255,255,255,0.1);
+}
+
+.research-section {
+  margin-top: 20px;
+}
+
+.research-section-title {
+  color: var(--accent);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+}
+
+.science-block {
+  background: var(--bg-dark);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.science-peril-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.science-peril-type {
+  font-weight: bold;
+  color: var(--yellow);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.science-peril-stat {
+  color: var(--text-dim);
+  font-size: 0.78em;
+}
+
+.science-block p {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.science-block p:last-child {
+  margin-bottom: 0;
+}
+
+.science-citation {
+  color: var(--text-dim);
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+.research-refs {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.research-ref-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.research-ref-list li {
+  color: var(--text-dim);
+  font-size: 0.8em;
+  padding-left: 14px;
+  position: relative;
+}
+.research-ref-list li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: rgba(255,255,255,0.2);
+}
+
+.research-refs-note {
+  color: var(--text-dim);
+  font-size: 0.78em;
+  margin-top: 10px;
+  font-style: italic;
 }
 
 /* === RESPONSIVE === */

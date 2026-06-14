@@ -86,14 +86,29 @@ function wave(r, x, y, w, deep = '#2a6aaa', crest = '#8ad0f0') {
 }
 
 function road(r, frame) {
-  const Y = 32;
-  r(0, Y, PW, 7, '#7a5a18');             // surface
-  r(0, Y, PW, 1, '#a07a28');             // top shoulder
-  r(0, Y + 6, PW, 1, '#a07a28');         // bottom shoulder
-  const off = (frame * 2) % 12;          // scrolling dashes
+  const Y0 = 32;
+  const Y1 = 38;
+  const CX = 40;  // vanishing point at horizontal center
+
+  // Full-width surface + shoulder lines
+  r(0, Y0, PW, 7, '#7a5a18');
+  r(0, Y0, PW, 1, '#a07a28');      // top shoulder
+  r(0, Y1, PW, 1, '#a07a28');      // bottom shoulder
+
+  // Perspective lane markers — converge toward horizon (CX) at y=Y0
+  for (let y = Y0; y <= Y1; y++) {
+    const t  = (y - Y0) / (Y1 - Y0);   // 0 at horizon, 1 at viewer
+    const lx = Math.round(CX - 22 * t);
+    const rx = Math.round(CX + 22 * t);
+    r(lx, y, 1, 1, '#c8a020');          // left lane marker
+    r(rx, y, 1, 1, '#c8a020');          // right lane marker
+  }
+
+  // Scrolling center dashes (motion between the lane markers)
+  const off = (frame * 2) % 12;
   for (let x = -off; x < PW + 12; x += 12) {
-    r(x, Y + 3, 8, 1, '#c8a020');
-    r(x, Y + 4, 8, 1, '#c8a020');
+    r(x + CX - 4, Y0 + 3, 8, 1, '#c8a020');
+    r(x + CX - 4, Y0 + 4, 8, 1, '#c8a020');
   }
 }
 
@@ -186,32 +201,33 @@ function drawWind(r, frame) {
 // ── TERRAIN SCENES ────────────────────────────────────────────────────────────
 
 function scenePlains(r, frame) {
-  // Sky
-  r(0, 0, PW, 24, '#7ec8e3');
-  // Clouds
+  // Sky — richer cornflower blue, horizon at 40% (y=18)
+  r(0, 0, PW, 18, '#4a8ec8');
   const cd = Math.floor(frame / 10);
   cloud(r, (8  + cd) % (PW + 12) - 8, 3, 11);
   cloud(r, (48 + cd) % (PW + 12) - 8, 6, 9);
   cloud(r, (28 + cd) % (PW + 12) - 8, 2, 7);
-  // Distant treeline / hills
-  r(0, 21, PW, 3, '#3a6a18');
-  hill(r, 14, 22, 24, 6, '#4a7a20');
-  hill(r, 56, 22, 28, 7, '#3d7018');
-  // Ground
-  r(0, 24, PW, 8, '#5a8a2a');
-  // Barn
-  r(53, 16, 11, 9, '#8b2020'); // walls
-  r(51, 14, 15, 3, '#5a1010'); // roof
-  r(51, 12, 15, 3, '#6a1818'); // roof peak
-  r(56, 21, 4,  4, '#2a0808'); // door
-  r(58, 17, 2,  2, '#ffd080'); // window
+  // Distant treeline at horizon
+  r(0, 15, PW, 3, '#3a6a18');
+  hill(r, 14, 18, 24, 6, '#4a7a20');
+  hill(r, 56, 18, 28, 7, '#3d7018');
+  // Ground (expanded — more ground visible with raised horizon)
+  r(0, 18, PW, 14, '#5a8a2a');
+  // Barn (base sitting on new horizon line)
+  r(53, 9,  11, 9, '#8b2020'); // walls
+  r(51, 7,  15, 3, '#5a1010'); // roof
+  r(51, 5,  15, 3, '#6a1818'); // roof peak
+  r(56, 14, 4,  4, '#2a0808'); // door
+  r(58, 10, 2,  2, '#ffd080'); // window
   // Trees
-  tree(r, 37, 16, 10, '#2d5a1b', '#5c4a2a');
-  tree(r, 44, 18, 8,  '#3a6a20', '#5c4a2a');
-  tree(r,  7, 18, 9,  '#2d5a1b', '#5c4a2a');
+  tree(r, 37, 8,  10, '#2d5a1b', '#5c4a2a');
+  tree(r, 44, 10, 8,  '#3a6a20', '#5c4a2a');
+  tree(r,  7, 9,  9,  '#2d5a1b', '#5c4a2a');
   // Road + foreground grass
   road(r, frame);
   r(0, 39, PW, 6, '#4a7a20');
+  // Foreground texture
+  for (let x = 2; x < PW; x += 9) r(x, 40, 4, 2, '#3a6a18');
 }
 
 function sceneDesert(r, frame) {
@@ -249,17 +265,17 @@ function sceneDesert(r, frame) {
 }
 
 function sceneMountain(r, frame) {
-  // Alpine sky
-  r(0, 0, PW, 24, '#6a8fb5');
+  // Alpine sky — horizon at 40%
+  r(0, 0, PW, 18, '#6a8fb5');
   cloud(r, (6 + Math.floor(frame / 15)) % 80, 4, 10);
   cloud(r, (52 + Math.floor(frame / 15)) % 80, 2, 8);
   // Mountain peaks
   peak(r,  8, 28, 26, 28, '#4a5060', '#e8f0ff');
   peak(r, 38, 28, 32, 24, '#5a6270', '#f0f4ff');
   peak(r, 65, 28, 24, 20, '#4a5060', '#e8f0ff');
-  // Pine tree line at base
+  // Pine tree line at base (raised to sit against peaks, not road)
   for (let x = 0; x < PW; x += 7) {
-    if ((x + 3) % 14 > 0) pineTall(r, x, 22, '#1a3a10', '#3a2a10');
+    if ((x + 3) % 14 > 0) pineTall(r, x, 12, '#1a3a10', '#3a2a10');
   }
   // Rocky ground
   r(0, 26, PW, 6, '#4a5060');
@@ -288,11 +304,14 @@ function sceneForest(r, frame) {
     const sx = 5 + i * 14 + Math.round(Math.sin(frame * 0.04 + i) * 2);
     r(sx, 0, 3, 20, 'rgba(180,220,100,0.12)');
   }
-  // Canopy layer
+  // Canopy layer (sides)
   r(0, 0,  18, 16, '#2d5a1b');
   r(62, 0, 18, 16, '#2d5a1b');
   r(0, 8,  10, 12, '#1a3a0e');
   r(70, 8, 10, 12, '#1a3a0e');
+  // Central canopy arch — closes the gap in the tree cover overhead
+  r(16, 0, 48, 8,  '#243a14');
+  r(20, 6, 40, 6,  '#2d5a1b');
   // Mid-ground trees
   pineTall(r,  3, 14, '#1a3a10', '#3a2a10');
   pineTall(r, 12, 16, '#243a14', '#3a2a10');
@@ -330,11 +349,12 @@ function sceneCoastal(r, frame) {
     wave(r, wo + 45, y, 20, '#1a6aaa', '#8ad0f0');
     wave(r, wo + 65, y + 2, 12, '#1a5a9a', '#70c0e8');
   }
-  // Lighthouse
-  r(65, 8,  4, 14, '#e8e8e0'); // tower
-  r(64, 7,  6, 2,  '#cc3322'); // lamp housing
-  r(65, 22, 4, 2,  '#aa9988'); // base
-  if (frame % 20 < 10) r(66, 8, 2, 1, '#ffff80'); // light flash
+  // Lighthouse on rocky coastal bluff (left side, above the tide line)
+  r(4, 6,  4, 20, '#e8e8e0'); // tower
+  r(3, 5,  6, 2,  '#cc3322'); // lamp housing
+  r(2, 24, 8, 4,  '#8a7a60'); // rocky bluff base
+  r(1, 27, 10, 2, '#6a5a48'); // bluff base shadow
+  if (frame % 20 < 10) r(5, 7, 2, 1, '#ffff80'); // light flash
   // Sandy beach
   r(0, 32, PW, 3, '#c8aa70');
   r(0, 35, PW, 2, '#b89860');
@@ -411,33 +431,35 @@ function sceneWetland(r, frame) {
 }
 
 function sceneHills(r, frame) {
-  // Clear sky
-  r(0, 0, PW, 24, '#82c8e0');
+  // Sky — deeper summer blue, horizon at 40% (y=18)
+  r(0, 0, PW, 18, '#5aaad0');
   const cd = Math.floor(frame / 12);
   cloud(r, (4  + cd) % (PW + 14) - 8, 4, 13);
   cloud(r, (50 + cd) % (PW + 14) - 8, 2, 10);
-  // Rolling hills (layered for depth)
-  r(0, 20, PW, 4, '#6aaa30');   // farthest
-  hill(r,  5, 22, 30, 8, '#5a9a20');
-  hill(r, 40, 22, 28, 9, '#6aaa30');
-  hill(r, 68, 22, 24, 7, '#5a9a20');
-  r(0, 24, PW, 8, '#5a9a28');   // mid ground
-  hill(r, 20, 30, 22, 8, '#4a8a18');
-  hill(r, 60, 30, 26, 9, '#5a9a28');
-  // Wildflowers (dots)
-  const flowers = [[8,26,'#ff6688'],[15,27,'#ffee44'],[28,25,'#ff6688'],
-                   [45,26,'#cc44ff'],[52,28,'#ffee44'],[70,25,'#ff6688']];
+  // Rolling hills (layered for depth — raised with horizon)
+  r(0, 14, PW, 4, '#6aaa30');   // farthest band near horizon
+  hill(r,  5, 18, 30, 8, '#5a9a20');
+  hill(r, 40, 18, 28, 9, '#6aaa30');
+  hill(r, 68, 18, 24, 7, '#5a9a20');
+  r(0, 18, PW, 14, '#5a9a28');  // mid ground
+  hill(r, 20, 28, 22, 8, '#4a8a18');
+  hill(r, 60, 28, 26, 9, '#5a9a28');
+  // Wildflowers (adjusted positions)
+  const flowers = [[8,20,'#ff6688'],[15,21,'#ffee44'],[28,19,'#ff6688'],
+                   [45,20,'#cc44ff'],[52,22,'#ffee44'],[70,19,'#ff6688']];
   flowers.forEach(([x, y, c]) => r(x, y, 2, 2, c));
   // Birds
   if (frame % 4 < 2) { r(20, 5, 2, 1, '#1a2a3a'); r(23, 5, 2, 1, '#1a2a3a'); }
   // Road
   road(r, frame);
   r(0, 39, PW, 6, '#4a8a18');
+  // Foreground wildflower texture
+  for (let x = 4; x < PW; x += 11) r(x, 40, 2, 2, '#ff8899');
 }
 
 function sceneValley(r, frame) {
   // Sky above valley
-  r(0, 0, PW, 18, '#5a9860');
+  r(0, 0, PW, 18, '#4a88b8');
   cloud(r, (12 + Math.floor(frame / 10)) % (PW + 12), 3, 10);
   // Valley walls (cliff faces left and right)
   r(0,  0, 20, 38, '#4a5068');  // left cliff
@@ -743,6 +765,15 @@ function eventSocial(r, frame) {
   r(0, 39, PW, 6, '#5a4a20');
 }
 
+// ── BORDER FRAME ─────────────────────────────────────────────────────────────
+
+function drawBorder(r) {
+  r(0,      0,      PW, 1,  '#000000');   // top edge
+  r(0,      PH - 1, PW, 1,  '#000000');   // bottom edge
+  r(0,      0,      1,  PH, '#000000');   // left edge
+  r(PW - 1, 0,      1,  PH, '#000000');   // right edge
+}
+
 // ── SCENE REGISTRY & DISPATCH ─────────────────────────────────────────────────
 
 const TERRAIN_SCENES = {
@@ -773,9 +804,11 @@ const EVENT_SCENES = {
 export function drawTerrainScene(r, terrain, frame) {
   const fn = TERRAIN_SCENES[terrain] || TERRAIN_SCENES.plains;
   fn(r, frame);
+  drawBorder(r);
 }
 
 export function drawEventScene(r, perilType, frame) {
   const fn = EVENT_SCENES[perilType] || EVENT_SCENES.positive;
   fn(r, frame);
+  drawBorder(r);
 }

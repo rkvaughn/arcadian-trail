@@ -139,9 +139,10 @@ export const eventDefs = [
       },
       {
         text: 'Keep driving — push through',
+        setsActiveHazard: { type: 'heat', drainPerTick: { health: -3, water: -2 } },
         outcomes: {
           effects: { health: -22, water: -18 },
-          narrative: 'Someone faints in the back seat. You pour precious water over their neck. The heat is relentless.'
+          narrative: 'Someone faints in the back seat. You pour precious water over their neck. The heat is relentless — and it won\'t let up.'
         }
       },
       {
@@ -542,6 +543,7 @@ export const eventDefs = [
     choices: [
       {
         text: 'Ford the shallows aggressively',
+        minigame: 'FROGGER',
         outcomes: {
           effects: { health: -15, morale: -10 },
           narrative: 'Water floods the floorboards. The engine chokes, sputters, but drags you onto the far bank wet and shaking.'

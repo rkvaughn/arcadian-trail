@@ -14,7 +14,7 @@
     <div class="title-container">
       <h1 class="title-main">Arcadian Trail</h1>
       <p class="title-sub">The Last Safe Road</p>
-      <p class="title-desc">The year is 2045. Climate collapse has made the coasts and sunbelt unlivable. You must lead your family north — through wildfires, floods, and failing infrastructure — to reach a climate refuge before your supplies run out.</p>
+      <p class="title-desc">Climate collapse has made the coasts and sunbelt unlivable. Choose your year, your emissions pathway, and lead your family north — through wildfires, floods, and failing infrastructure — to a climate refuge before your supplies run out.</p>
       <button id="btn-start" class="btn-primary">Start Journey</button>
     </div>
   </div>
@@ -33,6 +33,18 @@
       <div class="setup-section">
         <h3>Where are you headed?</h3>
         <select id="select-dest" class="setup-select"></select>
+      </div>
+
+      <div class="setup-section">
+        <h3>Year</h3>
+        <p class="desc-text">How far into the future are you traveling? Later years mean a more damaged world.</p>
+        <div id="year-options" class="year-grid"></div>
+      </div>
+
+      <div class="setup-section">
+        <h3>Climate Scenario</h3>
+        <p class="desc-text">Choose an emissions pathway. This determines the intensity of climate hazards.</p>
+        <div id="ssp-options" class="ssp-grid"></div>
       </div>
 
       <div class="setup-section">
@@ -69,8 +81,9 @@
     <div class="game-layout">
       <div class="game-map-section">
         <canvas id="asciiDisplay" class="ascii-display"></canvas>
+        <pre id="miniGameDisplay" class="ascii-display" style="display:none"></pre>
         <div id="asciiInfoBar" class="ascii-info-bar"></div>
-        <pre id="progressMap" class="progress-map"></pre>
+        <div id="progressMap" class="progress-map"></div>
       </div>
       <div class="game-side">
         <div id="dashboard" class="dashboard"></div>
@@ -94,6 +107,11 @@
         <h3>Full Journal</h3>
         <div id="end-journal" class="log-entries"></div>
       </div>
+      <div id="research-summary-section" class="research-summary-section" style="display:none">
+        <div id="research-summary-content"></div>
+      </div>
+      <button id="btn-research-summary" class="btn-research" style="display:none">What the Science Says ▾</button>
+
       <div id="feedback-section" class="feedback-section">
         <h3>How was the journey?</h3>
         <p class="feedback-prompt">Help us improve Arcadian Trail. What worked? What didn't? Any ideas?</p>

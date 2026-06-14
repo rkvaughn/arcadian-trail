@@ -16,102 +16,69 @@
 
 ## Phased Roadmap
 
-> Planned with Gemini (session 2). Build atmosphere first, then depth, then the marquee feature.
+### Phase 4B: Strategic Gameplay Depth (17 pts) — *next*
 
-### Phase 1: World Feel (8 pts) — *complete*
-| # | Task | Points | Status |
-|---|------|--------|--------|
-| G2 | More narrative variety per terrain | 2 | done |
-| G6 | Random roadside encounters (non-modal, journal + minor resource fx) | 3 | done |
-| G5 | Day/night cycle — tie to multi-day phases, not per-tick (avoid strobe) | 3 | done |
+> The SSP system (Phase 5) makes this more valuable: a player choosing SSP5-8.5/2100 should face not just harder event odds but structurally harder route decisions. Route branching and faction reputation pair naturally with the new scenario framing.
 
-### Phase 2: Strategic Depth (19 pts) — *current*
-| # | Task | Points | Priority | Status |
-|---|------|--------|----------|--------|
-| G14 | Peril deduplication — ensure back-to-back events can't repeat the same type; add more variety to event pool | 2 | 1 | done |
-| G4 | More event types (trade caravan, river crossing, etc.) | 5 | 2 | done |
-| G15 | Creative endings — 90s action movie taglines that vary based on perils encountered during the journey | 2 | 3 | done |
-| G16 | Make inventory matter at decision points — add more `itemRequired`/`itemBonus` branches to events so starting resource selections have visible impact; surface item usage in outcome narratives | 3 | 4 | done |
-| V7 | ASCII progress map — simplified US map outline showing route and current position, airline-flight-tracker style | 5 | 5 | done |
-| G17 | Party member deaths — family members can die of dysentery (and other causes) during crisis events. Log iconic "[Name] has died of dysentery" messages. Track family roster, reduce family size, affect morale, trigger game over if leader dies. | 5 | 6 | done |
-| G7 | Route branching at waypoints (safer vs. faster) | 5 | 7 | defer |
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| P2-G1 | Route branching at waypoints | 5 | 1 | New `WAYPOINT` state in `js/game.js`. At each named waypoint: Safe Route (+20% fuel cost, −30% event chance) vs Fast Route (−10% fuel, +40% event chance). SSP multipliers should compound with route risk choice — SSP5-8.5/Fast Route is brutal. |
+| P2-G2 | Game flag system | 2 | 2 | `game.flags = {}`. Add `setsFlag` to eventDef choices; add `conditions: { flags: ['x'] }` to events. Gate access to multi-stage event payoffs. |
+| P2-G3 | Multi-stage linked events (2–3 pairs) | 3 | 3 | Author 2–3 event pairs where choice A sets a flag → Event B fires later with payoff/consequence. Ideally one pair references the SSP scenario (e.g., solar farm success in SSP2-4.5 vs. abandoned wreckage in SSP5-8.5). |
+| P2-G4 | Faction reputation | 5 | 4 | `game.reputation = {}` per faction (refugees / merchants / militia). Accumulates across run. Expose in dashboard. Gate Iron Caravan trading and refugee checkpoint passage. |
+| P2-G5 | Item consumable limits | 2 | 5 | `maxUses: N` on items; track `game.itemUses = {}`; enforce in event resolution. Makes supply decisions carry more weight, especially under high-drain SSP scenarios. |
 
-### Phase 3: Marquee Features (31 pts)
-| # | Task | Points | Priority | Status |
-|---|------|--------|----------|--------|
-| G12 | Shelter Dash mini-game — original side-scrolling runner prototype | 8 | 1 | done |
-| G18 | Crash the Barricade — rename existing runner to barricade escape game. Speed-based collision (obstacles slow you down, stall = caught). Win/lose ASCII scene cards. Trigger from "ram the barricade" event choices. | 3 | 2 | done |
-| G19 | New Shelter Dash — non-scrolling 2D field, player finds randomly-placed shelters. Exposed = rapid weather-dependent damage (smoke/fire/drought/heat from weather API). In shelter = safe. Survive the timer. Trigger from "find shelter" choices. | 5 | 3 | done |
-| G20 | Mini-game choice triggers — add `minigame` property to eventDefs choices, wire through events.js → main.js to launch correct mini-game from player decisions. | 2 | 4 | done |
-| G21 | ASCII event scene cards — first-person POV ASCII art per event (e.g., Iron Caravan approaching). Replace driving scene during EVENT/RESULT states. Fallback to perilType generic scene. | 5 | 5 | done |
+---
 
 ### Phase 3b: Mini-Game Polish (5 pts)
-| # | Task | Points | Priority | Status |
-|---|------|--------|----------|--------|
-| G22 | Shelter Dash improvements — variable-quality shelters with visual distinction (sturdy vs. fragile), shelters can collapse forcing player to find another, display player health bar during mini-game | 5 | 1 | |
-
-### Phase 4A: Visual Overhaul — 1985 Oregon Trail Color Imagery (10 pts)
-
-> Replace dark-terminal monochrome aesthetic with terrain-differentiated color panels in the style of the 1985 Apple IIe Oregon Trail. Sky/ground color identity per terrain type; weather tinting on top; event scenes color-themed by peril type.
 
 | # | Task | Points | Priority | Notes |
 |---|------|--------|----------|-------|
-| P2-V1 | Terrain color palette system | 3 | 1 | Add `data-terrain` attribute to `#ascii-display`; define CSS custom properties per terrain in `style.css`; set attribute in `AsciiRenderer.render()` |
-| P2-V2 | Sky/ground background panels | 3 | 2 | Split display into sky rows (0–11) and ground rows (12–17); apply terrain-scoped background colors via CSS vars |
-| P2-V3 | Weather color tints | 2 | 3 | Rain → darken sky 20%; heat → orange ground cast; snow → lighten all vars; wire into existing weather overlay logic |
-| P2-V4 | Event scene card color theming | 2 | 4 | Apply perilType-scoped palettes during EVENT/RESULT states (wildfire → red/orange, flood → blue, freeze → ice) |
+| G22 | Shelter Dash improvements | 5 | 1 | Variable-quality shelters (sturdy vs. fragile with visual distinction); shelters can collapse forcing player to find another; player health bar during mini-game. Consider tying collapse probability to `heatwaveDuration` multiplier from SSP. |
 
-**Terrain color targets (Apple IIe composite palette-inspired):**
-
-| Terrain | Sky | Ground | Accent |
-|---------|-----|--------|--------|
-| Plains / grassland | `#87ceeb` | `#4a7c2f` | `#8b6914` |
-| Desert | `#d4a843` | `#c4873a` | `#8b4513` |
-| Mountain | `#b0c4de` | `#6b7280` | `#4a5568` |
-| Forest | `#7ab648` | `#2d5a1b` | `#5c4a2a` |
-| Coastal | `#4a9eda` | `#1a5c7a` | `#c2b280` |
-| Urban | `#9ca3af` | `#4b5563` | `#6b7280` |
-| Arctic | `#e0f2fe` | `#bfdbfe` | `#93c5fd` |
-| Swamp | `#78716c` | `#374151` | `#6b8e23` |
-
-### Phase 4B: Strategic Gameplay Depth (17 pts)
-
-> Add meaningful long-arc decision-making: route branching with tradeoffs, a cross-event flag system for consequence chaining, and faction reputation that accumulates across encounters.
-
-| # | Task | Points | Priority | Notes |
-|---|------|--------|----------|-------|
-| P2-G1 | Route branching at waypoints (G7) | 5 | 1 | WAYPOINT state at each city; Safe Route (+20% fuel cost) vs. Fast Route (+event chance); implement in `js/travel.js` + new state in `js/game.js` |
-| P2-G2 | Game flag system | 2 | 2 | Add `game.flags = {}` to Game class; add `setsFlag` to eventDef choices; check `game.flags[x]` in event `conditions` |
-| P2-G3 | Multi-stage linked events (2–3 pairs) | 3 | 3 | Author 2–3 event pairs where choice A sets a flag → Event B fires later with payoff narrative. Use flag system from P2-G2. |
-| P2-G4 | Faction reputation (checkpoints / caravans) | 5 | 4 | Add `game.reputation = {}` keyed by faction; expose in dashboard; wire gates into iron caravan + refugee checkpoint events |
-| P2-G5 | Item consumable limits | 2 | 5 | Add `maxUses: N` to items in `data/items.js`; track `game.itemUses = {}` in Game; enforce in event resolution |
+---
 
 ### Phase 4C: Polish & Utility (13 pts)
-| # | Task | Points |
-|---|------|--------|
-| G8 | Save/load game state to localStorage (build early to avoid serialization debt) | 3 |
-| G1 | Sound effects — `AudioContext` oscillators for retro synth, no external files | 5 |
-| G9 | Local leaderboard | 2 |
-| G3 | Further difficulty tuning (post-playtesting) | 3 |
 
-### Unphased (Visual, Technical, Marketing)
+> Save/load is now more important: the 3×3 scenario matrix (3 SSPs × 3 years) means players will want to compare runs and save in-progress games.
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| G8 | Save/load game state to localStorage | 3 | 1 | Must serialize `sspMultipliers`, `year`, `ssp` alongside existing state. Build before faction reputation (P2-G4) makes state complexity worse. |
+| G1 | Sound effects — `AudioContext` oscillators, no external files | 5 | 2 | Retro synth bleeps; event stings; resource warning tones. |
+| G9 | Local leaderboard | 2 | 3 | Score board indexed by SSP + year — lets players compare across difficulty tiers. |
+| G3 | Difficulty tuning (post-playtesting) | 3 | 4 | The SSP multipliers add a new difficulty axis; baseline burn rates may need rebalancing once SSP5-8.5/2100 runs are playtested. |
+
+---
+
+### Unphased — Visual
+
+> **Note:** V1–V6 were written against the ASCII renderer. Since `ui/pixelRenderer.js` replaced `ui/asciiRenderer.js`, these tasks need scope review before execution. V3/V4 (title/end screen art) are renderer-agnostic and can proceed. V1/V2 (terrain variants/animation) require pixel-art equivalents, not ASCII additions.
+
 | # | Task | Points | Notes |
 |---|------|--------|-------|
-| V1 | Add 3rd ASCII art variant per terrain | 3 | |
-| V2 | Directional weather animation | 2 | |
-| V3 | Title screen ASCII art banner | 2 | |
-| V4 | End screen ASCII art (win/lose scenes) | 2 | |
-| V5 | Terrain-specific event panel border colors | 1 | |
-| V6 | Dashboard ASCII icons | 1 | |
-| T1 | API key proxy for production | 3 | |
-| T2 | Weather API error handling UI | 2 | |
-| T3 | Unit tests (game.js, scoring.js) | 5 | |
-| T4 | Accessibility (ARIA, keyboard nav) | 3 | |
-| T5 | PWA offline support | 3 | |
-| T6 | Analytics | 2 | |
-| P1 | OG meta tags + social preview | 2 | |
-| P2 | Personal site screenshot update | 1 | |
-| P3 | README.md | 2 | |
+| V1 | 3rd pixel scene variant per terrain | 3 | Pixel art equivalent of ASCII V1 — add third scene drawing function per terrain in `data/pixelScenes.js` |
+| V2 | Directional weather animation | 2 | Already partially present in pixel renderer; extend for all weather types |
+| V3 | Title screen pixel art / logo | 2 | Renderer-agnostic — HTML/CSS treatment |
+| V4 | End screen win/lose scene cards | 2 | Can be pixel art canvas or CSS |
+| V5 | Terrain-specific event panel border colors | 1 | CSS only — wire `data-terrain` from V4A work |
+| V6 | Dashboard resource bar icons | 1 | CSS/unicode — replace plain labels |
+
+---
+
+### Unphased — Technical
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| T1 | API key proxy for OpenWeatherMap | 3 | HIGH | Key is hardcoded in `js/weather.js`. Must fix before any wide publication or press. |
+| P3 | README.md | 2 | HIGH | Game now has `REFERENCES.md` and a research narrative — a README explaining the project, its scientific grounding, and how to run it locally is overdue. |
+| T2 | Weather API error handling UI | 2 | medium | Silent failure currently; surface weather fetch errors in the log |
+| T3 | Unit tests (`js/game.js`, `js/scoring.js`, `data/ssp.js`) | 5 | medium | `data/ssp.js` multiplier functions are now testable pure functions — good place to start |
+| T4 | Accessibility (ARIA, keyboard nav) | 3 | low | |
+| T5 | PWA offline support | 3 | low | |
+| T6 | Analytics | 2 | low | |
+| P1 | OG meta tags + social preview | 2 | low | |
+| P2 | Personal site screenshot update | 1 | low | |
 
 ---
 
@@ -120,7 +87,7 @@
 | # | Task | Points | Session | Date |
 |---|------|--------|---------|------|
 | C1 | ASCII terrain renderer (replace canvas) | 8 | 1 | 2025-02-11 |
-| C2 | 9 terrain types x 2 variants | 5 | 1 | 2025-02-11 |
+| C2 | 9 terrain types × 2 variants | 5 | 1 | 2025-02-11 |
 | C3 | Weather overlay system (rain, snow, storm, wind, mist, heat) | 3 | 1 | 2025-02-11 |
 | C4 | 10 event scenes (wildfire, hurricane, flood, etc.) | 5 | 1 | 2025-02-11 |
 | C5 | Deploy to GitHub Pages | 2 | 1 | 2025-02-11 |
@@ -133,20 +100,39 @@
 | C12 | Terrain transition wipe effect | 2 | 2 | 2025-02-11 |
 | C13 | Color highlights via HTML spans (vehicle, weather, events, road) | 3 | 2 | 2025-02-11 |
 | C14 | Post-game feedback form — saves to localStorage with game context | 3 | 2 | 2025-02-11 |
-| C15 | Slow down gameplay — travel speed 1200→2000ms, 1.5s delay on result continue button | 1 | 2 | 2025-02-11 |
+| C15 | Slow down gameplay — travel speed 1200→2000ms, 1.5s delay on result continue | 1 | 2 | 2025-02-11 |
 | C16 | Increase difficulty — higher burn rates, 30% event chance, buffed damage on risky choices | 2 | 2 | 2025-02-11 |
-| C17 | Feedback export — download button + `data/feedback.json` seed file for repo persistence | 2 | 2 | 2025-02-11 |
-| C18 | Favicon refresh — terminal-themed SVG (AT monogram, road, vehicle accent) | 1 | 2 | 2025-02-11 |
-| C19 | Journal auto-scroll — `scrollIntoView` on new log entries | 1 | 2 | 2025-02-11 |
-| C20 | More narrative variety — 45 terrain-specific narratives | 2 | 2 | 2025-02-11 |
-| C21 | Random roadside encounters — 20 encounters, non-modal with resource fx | 3 | 2 | 2025-02-11 |
+| C17 | Feedback export — download button + `data/feedback.json` seed | 2 | 2 | 2025-02-11 |
+| C18 | Favicon refresh — terminal-themed SVG (AT monogram) | 1 | 2 | 2025-02-11 |
+| C19 | Journal auto-scroll | 1 | 2 | 2025-02-11 |
+| C20 | Narrative variety — 45 terrain-specific narratives | 2 | 2 | 2025-02-11 |
+| C21 | Roadside encounters — 20 encounters, non-modal with resource fx | 3 | 2 | 2025-02-11 |
 | C22 | Day/night cycle — 4-phase palette shifts via CSS classes | 3 | 2 | 2025-02-11 |
 | C23 | Peril deduplication — recent event type suppression (95/70/40% penalties) | 2 | 3 | 2026-02-11 |
 | C24 | 8 new event types — river crossing, iron caravan, flash freeze, blight, storm surge, refugee checkpoint, solar farm, abandoned hospital | 5 | 3 | 2026-02-11 |
-| C25 | Creative endings — 90s action taglines keyed to dominant peril type (win + lose pools) | 2 | 3 | 2026-02-11 |
-| C26 | Inventory matters — 18 item synergies across 28 events, all 10 items wired up, itemNarrative support | 3 | 3 | 2026-02-11 |
-| C27 | ASCII progress map — US outline with route/waypoint plotting, position tracker, color-coded markers | 5 | 3 | 2026-02-11 |
-| C28 | Party member deaths — travel & event death paths, family roster UI, end screen roster, scoring fix | 5 | 3 | 2026-02-11 |
+| C25 | Creative endings — 90s action taglines keyed to dominant peril type | 2 | 3 | 2026-02-11 |
+| C26 | Inventory matters — 18 item synergies across 28 events | 3 | 3 | 2026-02-11 |
+| C27 | ASCII progress map — US outline with route/waypoint plotting, position tracker | 5 | 3 | 2026-02-11 |
+| C28 | Party member deaths — travel & event death paths, family roster UI, end screen roster | 5 | 3 | 2026-02-11 |
+| C29 | Pixel art renderer — canvas-based `ui/pixelRenderer.js` replacing ASCII renderer | 8 | 4 | 2026-04-14 |
+| C30 | SSP/year scenario selection — setup screen with 3 years (2050/2075/2100) and 3 SSPs (SSP2-4.5 / SSP3-7.0 / SSP5-8.5) | 3 | 5 | 2026-06-13 |
+| C31 | Climate risk multiplier system (`data/ssp.js`) — all multipliers grounded in IPCC AR6, Clausius-Clapeyron, Sweet & Park SLR, VPD/wildfire, Martinez-Villalobos heatwave duration, Climate Impact Lab mortality, FRBSF productivity | 5 | 5 | 2026-06-13 |
+| C32 | SSP-driven event probability scaling — heat/flood/wildfire weights in `js/events.js` | 2 | 5 | 2026-06-13 |
+| C33 | SSP-driven resource burn scaling — fuel and health drain in `js/travel.js` | 2 | 5 | 2026-06-13 |
+| C34 | Post-game research summary (`ui/researchSummary.js`) — bespoke per-run narrative with inline citations, personalized to origin city, dominant perils, and specific multiplier values | 5 | 5 | 2026-06-13 |
+| C35 | `REFERENCES.md` — full scientific citation record for all 8 sources, calibration assumption table | 1 | 5 | 2026-06-13 |
+| CL1 | Remove deprecated/unused code — deleted `ui/asciiRenderer.js` (366 ln), `data/asciiArt.js` (1,257 ln), `ui/progressMap.js` | 2 | 6 | 2026-06-13 |
+| CL2 | Update docstrings — JSDoc added to `travelTick()`, `selectEvent()`, `game.setup()`; module-level comments added to `travel.js`, `events.js` | 1 | 6 | 2026-06-13 |
+| CL3 | Doc files current — `agents.md` fully rewritten for pixel renderer + SSP system; `CONTEXT.md` flagged as original brief with pointer to `agents.md` | 1 | 6 | 2026-06-13 |
+| S1 | SSP-aware origin city descriptions — 6 cities × 3 SSPs, `getOriginDescription()` added to `data/cities.js` | 2 | 7 | 2026-06-13 |
+| S2 | Departure journal entry with year and scenario — "Day 1: The Walker family departs Miami — 2100, SSP5-8.5. [city desc]" | 1 | 7 | 2026-06-13 |
+| S3 | Dashboard scenario badge — `.scenario-badge` HUD element showing "SSP5-8.5 · 2100 · Hard" wired into `dashboard.setScenario()` | 1 | 7 | 2026-06-13 |
+| S4 | Heatwave multi-tick duration — `activeHazard` field + drain-per-tick in `travel.js`, duration from `sspMultipliers.heatwaveDuration`, hazard indicator in dashboard | 3 | 7 | 2026-06-13 |
+| S5 | SSP-aware destination descriptions — 4 cities × 3 SSPs in `data/cities.js` | 1 | 7 | 2026-06-13 |
+| P2-V1 | Wire `data-terrain` to `.game-layout` in `pixelRenderer.js` so CSS vars cascade to info bar, event panel, dashboard | 3 | 8 | 2026-06-13 |
+| P2-V2 | Sky/ground panels — canvas border → `var(--terrain-sky)`, info bar bg → `var(--terrain-ground)` with smooth transitions | 3 | 8 | 2026-06-13 |
+| P2-V3 | Weather color tints — day/night + weather composed in `_timeFilter()`/`_weatherFilter()` as single `canvas.style.filter`; replaces CSS class approach | 2 | 8 | 2026-06-13 |
+| P2-V4 | Event scene card theming — `[data-terrain^="event-"]` CSS rules tint event panel border/glow and event name to peril-type palette | 2 | 8 | 2026-06-13 |
 
 ---
 

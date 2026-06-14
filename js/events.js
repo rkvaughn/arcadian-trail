@@ -1,8 +1,26 @@
+/**
+ * js/events.js — Event selection and choice resolution
+ *
+ * selectEvent() weights the full event pool by terrain, weather risk,
+ * peril deduplication, and SSP climate multipliers, then draws one event.
+ *
+ * applyChoice() resolves a player decision, checking item synergies,
+ * routing mini-game triggers, and applying resource deltas.
+ */
 import { eventDefs } from '../data/eventDefs.js';
 
-// Select an event based on terrain, weather, and randomness
-// recentPerilTypes: last 3 peril types to suppress repeats
-export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = []) {
+/**
+ * Select a weighted-random event for the current travel tick.
+ *
+ * @param {string} terrain          — current waypoint terrain type
+ * @param {object} weatherRisk      — live risk scores { heat, flood, wildfire, tornado, hurricane }
+ * @param {array}  inventory        — player's selected items
+ * @param {array}  recentPerilTypes — last ≤3 peril types; recent types are heavily penalised
+ * @param {object} sspMultipliers   — from data/ssp.js; scales heatRisk, floodRisk, wildfireRisk
+ *                                    on top of weather boosts. null = no SSP scaling (fallback).
+ * @returns {object} eventDef
+ */
+export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = [], sspMultipliers = null) {
   const weights = [];
   let totalWeight = 0;
 
@@ -37,6 +55,20 @@ export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = 
       }
       if (event.perilType === 'hurricane' && weatherRisk.hurricane) {
         weight *= (1 + weatherRisk.hurricane);
+      }
+    }
+
+    // SSP climate multipliers — scale event probability by scenario/year risk
+    // Sources and derivations: data/ssp.js and REFERENCES.md
+    if (sspMultipliers) {
+      if (event.perilType === 'heat') {
+        weight *= sspMultipliers.heatRisk;
+      }
+      if (event.perilType === 'flood' || event.perilType === 'hurricane') {
+        weight *= sspMultipliers.floodRisk;
+      }
+      if (event.perilType === 'wildfire') {
+        weight *= sspMultipliers.wildfireRisk;
       }
     }
 
@@ -113,7 +145,8 @@ export function applyChoice(gameState, event, choiceIndex) {
   return {
     narrative,
     death,
-    effects
+    effects,
+    setsActiveHazard: choice.setsActiveHazard || null
   };
 }
 

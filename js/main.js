@@ -4,9 +4,10 @@ import { PixelRenderer } from '../ui/pixelRenderer.js';
 import { Dashboard } from '../ui/dashboard.js';
 import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
-import { ProgressMap } from '../ui/progressMap.js';
+import { MapOverlay } from '../ui/mapOverlay.js';
 import { ShelterDash } from '../ui/shelterDash.js';
 import { BarricadeRunner } from '../ui/barricadeRunner.js';
+import { FroggerDash } from '../ui/froggerDash.js';
 import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js';
 import { calculateScore } from './scoring.js';
 import { getRandomNarrative } from '../data/narratives.js';
@@ -24,8 +25,8 @@ class GameController {
     this.travelSpeed = TRAVEL_SPEED_MS;
     this.currentWeather = null;
 
-    this.screens = new ScreenManager((origin, dest, name, trait, size, items) => {
-      this.beginGame(origin, dest, name, trait, size, items);
+    this.screens = new ScreenManager((origin, dest, name, trait, size, items, year, ssp) => {
+      this.beginGame(origin, dest, name, trait, size, items, year, ssp);
     });
 
     this.asciiRenderer = new PixelRenderer(
@@ -39,13 +40,15 @@ class GameController {
       this.handleEventChoice(choice);
     });
 
-    this.progressMap = new ProgressMap(document.getElementById('progressMap'));
+    this.progressMap = new MapOverlay(document.getElementById('progressMap'));
     this.familyRoster = document.getElementById('family-roster');
 
     const displayEl = document.getElementById('asciiDisplay');
     const infoBarEl = document.getElementById('asciiInfoBar');
-    this.shelterDash = new ShelterDash(displayEl, infoBarEl);
-    this.barricadeRunner = new BarricadeRunner(displayEl, infoBarEl);
+    const miniGameEl = document.getElementById('miniGameDisplay');
+    this.shelterDash = new ShelterDash(miniGameEl, infoBarEl);
+    this.barricadeRunner = new BarricadeRunner(miniGameEl, infoBarEl);
+    this.froggerDash = new FroggerDash(displayEl, infoBarEl);
 
     this.screens.initTitle();
   }
@@ -64,8 +67,8 @@ class GameController {
     this.familyRoster.innerHTML = `<div class="roster-title">Party</div><div class="roster-list">${members}</div>`;
   }
 
-  beginGame(origin, dest, leaderName, leaderTrait, familySize, items) {
-    const result = this.game.setup(origin, dest, leaderName, leaderTrait, familySize, items);
+  beginGame(origin, dest, leaderName, leaderTrait, familySize, items, year, ssp) {
+    const result = this.game.setup(origin, dest, leaderName, leaderTrait, familySize, items, year, ssp);
 
     if (result.error) {
       alert(result.error);
@@ -73,6 +76,7 @@ class GameController {
     }
 
     this.dashboard.update(this.game.resources);
+    this.dashboard.setScenario(this.game.ssp, this.game.year);
     this.updateRoster();
     this.logger.clear();
     this.logger.log(`Departing ${origin.name} for ${dest.name}...`, 'info');
@@ -107,6 +111,7 @@ class GameController {
       if (!result) return;
 
       this.dashboard.update(this.game.resources);
+      this.dashboard.setActiveHazard(this.game.activeHazard);
       this.updateRoster();
 
       switch (result.type) {
@@ -183,6 +188,7 @@ class GameController {
     }
 
     this.dashboard.update(this.game.resources);
+    this.dashboard.setActiveHazard(this.game.activeHazard);
     this.updateRoster();
 
     if (result.type === 'gameOver') {
@@ -210,16 +216,36 @@ class GameController {
     const progress = this.game.getProgress();
     const callback = (mgResult) => this._onMiniGameComplete(mgResult);
 
-    if (type === 'BARRICADE') {
+    const canvasEl = document.getElementById('asciiDisplay');
+    const miniGameEl = document.getElementById('miniGameDisplay');
+
+    if (type === 'FROGGER') {
+      // Frogger uses the canvas directly
+      canvasEl.style.display = '';
+      miniGameEl.style.display = 'none';
+      this.logger.log('FORD THE RIVER! Ride the logs — don\'t fall in!', 'event');
+      this.froggerDash.start(progress, callback, this.currentWeather);
+    } else if (type === 'BARRICADE') {
+      // ASCII mini-games use the pre element
+      canvasEl.style.display = 'none';
+      miniGameEl.style.display = '';
       this.logger.log('CRASH THE BARRICADE! Dodge obstacles and break free!', 'event');
       this.barricadeRunner.start(progress, callback);
     } else {
+      canvasEl.style.display = 'none';
+      miniGameEl.style.display = '';
       this.logger.log('SHELTER DASH! Find shelter before the storm hits!', 'event');
       this.shelterDash.start(progress, callback, this.game.weatherRisk);
     }
   }
 
   _onMiniGameComplete(result) {
+    // Restore canvas display (in case an ASCII mini-game was showing the pre element)
+    const canvasEl = document.getElementById('asciiDisplay');
+    const miniGameEl = document.getElementById('miniGameDisplay');
+    canvasEl.style.display = '';
+    miniGameEl.style.display = 'none';
+
     // Apply effects to resources
     if (result.effects) {
       for (const [resource, value] of Object.entries(result.effects)) {

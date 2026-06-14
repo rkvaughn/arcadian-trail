@@ -2,6 +2,8 @@ import { origins, destinations } from '../data/cities.js';
 import { getAvailableDestinations } from '../data/routes.js';
 import { getTraits } from '../js/characters.js';
 import { itemDefs } from '../data/items.js';
+import { SSP_DEFS, YEAR_DEFS } from '../data/ssp.js';
+import { generateResearchSummary } from './researchSummary.js';
 
 // 90s action movie taglines keyed by dominant peril type
 const WIN_TAGLINES = {
@@ -80,6 +82,8 @@ export class ScreenManager {
   initSetup() {
     this.show('setup');
     this.populateOrigins();
+    this.populateYear();
+    this.populateSSP();
     this.populateTraits();
     this.populateItems();
 
@@ -123,6 +127,43 @@ export class ScreenManager {
     // Show origin description
     const origin = origins.find(o => o.id === originId);
     document.getElementById('origin-desc').textContent = origin ? origin.description : '';
+  }
+
+  populateYear() {
+    const container = document.getElementById('year-options');
+    container.innerHTML = '';
+    const years = Object.entries(YEAR_DEFS);
+    for (const [year, def] of years) {
+      const label = document.createElement('label');
+      label.className = 'year-option';
+      label.innerHTML = `
+        <input type="radio" name="year" value="${year}" ${year === '2050' ? 'checked' : ''}>
+        <span class="year-value">${year}</span>
+        <span class="year-label">${def.label}</span>
+        <span class="year-tagline">${def.tagline}</span>
+      `;
+      container.appendChild(label);
+    }
+  }
+
+  populateSSP() {
+    const container = document.getElementById('ssp-options');
+    container.innerHTML = '';
+    for (const [id, def] of Object.entries(SSP_DEFS)) {
+      const label = document.createElement('label');
+      label.className = 'ssp-option';
+      label.innerHTML = `
+        <input type="radio" name="ssp" value="${id}" ${id === 'SSP2-4.5' ? 'checked' : ''}>
+        <span class="ssp-header">
+          <span class="ssp-name">${def.shortName}</span>
+          <span class="ssp-meta">${def.id} &nbsp;·&nbsp;
+            <span class="ssp-difficulty" style="color:${def.color}">${def.difficulty}</span>
+          </span>
+        </span>
+        <span class="ssp-desc">${def.narrative}</span>
+      `;
+      container.appendChild(label);
+    }
   }
 
   populateTraits() {
@@ -178,9 +219,11 @@ export class ScreenManager {
   submitSetup() {
     const originId = document.getElementById('select-origin').value;
     const destId = document.getElementById('select-dest').value;
-    const leaderName = document.getElementById('input-name').value.trim() || 'Walker';
+    const leaderName  = document.getElementById('input-name').value.trim() || 'Walker';
     const leaderTrait = document.querySelector('input[name="trait"]:checked')?.value || 'resilient';
-    const familySize = parseInt(document.getElementById('select-family-size').value) || 4;
+    const familySize  = parseInt(document.getElementById('select-family-size').value) || 4;
+    const year = parseInt(document.querySelector('input[name="year"]:checked')?.value || '2050', 10);
+    const ssp  = document.querySelector('input[name="ssp"]:checked')?.value || 'SSP2-4.5';
 
     if (!originId || !destId) {
       document.getElementById('setup-error').textContent = 'Please select both an origin and destination.';
@@ -209,7 +252,7 @@ export class ScreenManager {
 
     document.getElementById('setup-error').textContent = '';
     this.show('game');
-    this.onSetupComplete(origin, dest, leaderName, leaderTrait, familySize, selectedItems);
+    this.onSetupComplete(origin, dest, leaderName, leaderTrait, familySize, selectedItems, year, ssp);
   }
 
   showEnd(isWin, game, score) {
@@ -264,6 +307,24 @@ export class ScreenManager {
       div.className = 'journal-entry';
       div.textContent = entry;
       journal.appendChild(div);
+    }
+
+    // Research summary — show button only when SSP multipliers are available
+    const researchBtn     = document.getElementById('btn-research-summary');
+    const researchSection = document.getElementById('research-summary-section');
+    if (game.sspMultipliers) {
+      researchBtn.style.display = '';
+      let summaryRendered = false;
+      researchBtn.addEventListener('click', () => {
+        const open = researchSection.style.display !== 'none';
+        researchSection.style.display = open ? 'none' : 'block';
+        researchBtn.textContent = open ? 'What the Science Says ▾' : 'What the Science Says ▴';
+        if (!open && !summaryRendered) {
+          document.getElementById('research-summary-content').innerHTML = generateResearchSummary(game);
+          summaryRendered = true;
+        }
+        if (!open) researchSection.scrollIntoView({ behavior: 'smooth' });
+      });
     }
 
     // Feedback form

@@ -43,6 +43,10 @@ export class PixelRenderer {
 
     // Disable anti-aliasing so pixels stay crisp when scaled
     this.ctx.imageSmoothingEnabled = false;
+
+    // Cache .game-layout ancestor — used to propagate data-terrain so CSS vars
+    // cascade to all siblings (info bar, event panel, dashboard). V1/V2/V4.
+    this.gameLayout = canvasEl.closest('.game-layout') || null;
   }
 
   // Bound rect helper — draws one logical pixel block
@@ -95,21 +99,51 @@ export class PixelRenderer {
       drawVehicle(r, this.frameCount);
     }
 
-    // ── Update CSS data attribute (for day/night filter + any remaining CSS) ─
-    this.canvas.dataset.terrain = isEvent
-      ? `event-${game.currentEvent.perilType}`
-      : terrain;
+    // ── Propagate data-terrain to canvas and game-layout parent ─────────────
+    // V1: setting on game-layout makes CSS vars (--terrain-sky, --terrain-ground,
+    // --terrain-text) cascade to all children: info bar, event panel, dashboard.
+    const terrainAttr = isEvent ? `event-${game.currentEvent.perilType}` : terrain;
+    this.canvas.dataset.terrain = terrainAttr;
+    if (this.gameLayout) this.gameLayout.dataset.terrain = terrainAttr;
 
-    // ── Day/night CSS class ─────────────────────────────────────────────────
+    // ── Compose day/night + weather into a single CSS filter ─────────────────
+    // V3: composing here lets weather tints stack cleanly on top of time-of-day
+    // effects. Previously these were separate CSS class filters that could not
+    // be combined without a wrapper element.
     const phase = TIME_PHASES[
       Math.floor(game.day / DAYS_PER_PHASE) % TIME_PHASES.length
     ];
-    for (const p of TIME_PHASES) {
-      this.canvas.classList.toggle(`time-${p}`, p === phase);
-    }
+    const composed = [this._timeFilter(phase), this._weatherFilter(weatherIcon)]
+      .filter(Boolean).join(' ');
+    this.canvas.style.filter = composed || 'none';
 
     // ── Info bar ────────────────────────────────────────────────────────────
     this._updateInfoBar(game);
+  }
+
+  // V3: Day/night filter string — applied before weather tint (order matters in CSS filters)
+  _timeFilter(phase) {
+    switch (phase) {
+      case 'dawn':  return 'sepia(35%) brightness(0.80) saturate(0.85)';
+      case 'dusk':  return 'sepia(55%) brightness(0.72) hue-rotate(12deg) saturate(0.9)';
+      case 'night': return 'brightness(0.28) saturate(0.5) hue-rotate(200deg)';
+      default:      return '';
+    }
+  }
+
+  // V3: Weather color tint — stacks on top of the day/night base
+  _weatherFilter(weatherIcon) {
+    switch (weatherIcon) {
+      case 'rain':
+      case 'drizzle': return 'brightness(0.82) saturate(0.88)';
+      case 'storm':   return 'brightness(0.65) saturate(0.75)';
+      case 'snow':    return 'brightness(1.08) saturate(0.62)';
+      case 'heat':    return 'sepia(25%) hue-rotate(-18deg) brightness(1.04)';
+      case 'mist':
+      case 'fog':
+      case 'wind':    return 'brightness(0.92) saturate(0.85)';
+      default:        return '';
+    }
   }
 
   _updateInfoBar(game) {

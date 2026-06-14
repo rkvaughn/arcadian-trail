@@ -2,6 +2,8 @@ import { getRoute, getTotalDistance } from '../data/routes.js';
 import { createFamily, getFamilyPassives } from './characters.js';
 import { travelTick } from './travel.js';
 import { selectEvent, applyChoice } from './events.js';
+import { computeSSPMultipliers, SSP_DEFS } from '../data/ssp.js';
+import { getOriginDescription } from '../data/cities.js';
 
 export const STATES = {
   TITLE: 'TITLE',
@@ -38,16 +40,35 @@ export class Game {
     this.perilHistory = [];
     this.startBudget = 100;
     this.distanceTraveledToday = 0;
+    this.year = 2050;
+    this.ssp = 'SSP2-4.5';
+    this.sspMultipliers = null;
+    this.activeHazard = null; // { type, ticksRemaining, drainPerTick: { resource: amount } }
   }
 
   setState(newState) {
     this.state = newState;
   }
 
-  // Setup phase: configure the journey
-  setup(originCity, destCity, leaderName, leaderTrait, familySize, selectedItems) {
+  /**
+   * Configure a new journey. Called once from GameController.beginGame().
+   *
+   * @param {object} originCity     — city object from data/cities.js
+   * @param {object} destCity       — city object from data/cities.js
+   * @param {string} leaderName     — player-entered name
+   * @param {string} leaderTrait    — trait id from js/characters.js
+   * @param {number} familySize     — 3 | 4 | 5
+   * @param {array}  selectedItems  — item definitions from data/items.js
+   * @param {number} year           — 2050 | 2075 | 2100
+   * @param {string} ssp            — 'SSP2-4.5' | 'SSP3-7.0' | 'SSP5-8.5'
+   * @returns {{ success: true } | { error: string }}
+   */
+  setup(originCity, destCity, leaderName, leaderTrait, familySize, selectedItems, year, ssp) {
     this.origin = originCity;
     this.destination = destCity;
+    this.year = year || 2050;
+    this.ssp  = ssp  || 'SSP2-4.5';
+    this.sspMultipliers = computeSSPMultipliers(this.ssp, this.year, originCity.id);
     this.route = getRoute(originCity.id, destCity.id);
 
     if (!this.route) {
@@ -69,8 +90,11 @@ export class Game {
     this.journalEntries = [];
     this.recentPerilTypes = [];
     this.perilHistory = [];
+    this.activeHazard = null;
 
-    this.addJournal(`Day 1: The ${leaderName} family departs ${originCity.name}, heading for ${destCity.name}. ${originCity.description}`);
+    const sspDef = SSP_DEFS[this.ssp];
+    const originDesc = getOriginDescription(originCity, this.ssp);
+    this.addJournal(`Day 1: The ${leaderName} family departs ${originCity.name} — ${this.year}, ${sspDef.shortName}. ${originDesc} Destination: ${destCity.name}.`);
     this.state = STATES.TRAVELING;
 
     return { success: true };
@@ -80,7 +104,13 @@ export class Game {
   travel() {
     if (this.state !== STATES.TRAVELING) return null;
 
+    const hadHazard = !!this.activeHazard;
     const result = travelTick(this);
+
+    // Log when an active hazard clears
+    if (hadHazard && !this.activeHazard) {
+      this.addJournal(`Day ${this.day}: The heatwave finally breaks.`);
+    }
 
     if (result.arrived) {
       this.state = STATES.WIN;
@@ -106,7 +136,7 @@ export class Game {
 
     if (result.triggerEvent) {
       const terrain = this.route[this.waypointIndex].terrain;
-      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes);
+      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes, this.sspMultipliers);
       this.recentPerilTypes.push(this.currentEvent.perilType);
       if (this.recentPerilTypes.length > 3) this.recentPerilTypes.shift();
       this.perilHistory.push(this.currentEvent.perilType);
@@ -137,6 +167,17 @@ export class Game {
     this.lastResult = result;
 
     this.addJournal(`Day ${this.day}: ${result.narrative}`);
+
+    // Set multi-tick hazard if the choice triggers one (S4)
+    // Duration is scaled by SSP heatwave duration multiplier (Martinez-Villalobos et al. 2025)
+    if (result.setsActiveHazard && this.sspMultipliers) {
+      const duration = Math.max(1, Math.ceil(this.sspMultipliers.heatwaveDuration));
+      this.activeHazard = {
+        type: result.setsActiveHazard.type,
+        ticksRemaining: duration,
+        drainPerTick: result.setsActiveHazard.drainPerTick
+      };
+    }
 
     // Log party member death from event
     if (result.death) {

@@ -1,5 +1,9 @@
 # Project Name: Arcadian Trail
 
+> **Note:** This is the original project brief from project inception. It accurately describes the core concept and tone but predates several major additions: the pixel art renderer, three mini-games, the SSP scenario system, and the post-game research summary. For current codebase state, priorities, and architecture, read `agents.md` instead.
+
+---
+
 ## Overview
 You are helping develop a 2D game inspired by *Oregon Trail*, but set in a near-future scenario where players guide climate migrants fleeing high-risk areas (e.g. flood zones, wildfire-prone regions, drought-scarred farmland). Players must manage limited resources, survive peril-specific events, and adapt to dynamically sourced climate data.
 

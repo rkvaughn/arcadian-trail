@@ -30,11 +30,7 @@
 
 ---
 
-### Phase 3b: Mini-Game Polish (5 pts)
-
-| # | Task | Points | Priority | Notes |
-|---|------|--------|----------|-------|
-| G22 | Shelter Dash improvements | 5 | 1 | Variable-quality shelters (sturdy vs. fragile with visual distinction); shelters can collapse forcing player to find another; player health bar during mini-game. Consider tying collapse probability to `heatwaveDuration` multiplier from SSP. |
+### Phase 3b: Mini-Game Polish (5 pts) — *done*
 
 ---
 
@@ -133,6 +129,8 @@
 | P2-V2 | Sky/ground panels — canvas border → `var(--terrain-sky)`, info bar bg → `var(--terrain-ground)` with smooth transitions | 3 | 8 | 2026-06-13 |
 | P2-V3 | Weather color tints — day/night + weather composed in `_timeFilter()`/`_weatherFilter()` as single `canvas.style.filter`; replaces CSS class approach | 2 | 8 | 2026-06-13 |
 | P2-V4 | Event scene card theming — `[data-terrain^="event-"]` CSS rules tint event panel border/glow and event name to peril-type palette | 2 | 8 | 2026-06-13 |
+| G22 | Shelter Dash: sturdy/fragile quality, per-shelter collapse timer (5s fragile / 8s sturdy), interior countdown, rubble flash on collapse | 4 | 9 | 2026-06-14 |
+| FB1 | Event choice animation: selected choice highlights green, unchosen fade to 35%, 480ms before result loads | 1 | 9 | 2026-06-14 |
 
 ---
 

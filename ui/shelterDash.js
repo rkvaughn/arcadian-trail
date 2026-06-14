@@ -136,7 +136,17 @@ export class ShelterDash {
           row < s.row + s.size + 2 && row + size + 2 > s.row
         );
         if (!overlaps) {
-          this.shelters.push({ col, row, size });
+          // Sturdy shelters last 8s, fragile last 5s — visual distinction via roof char
+          const quality = Math.random() < 0.4 ? 'sturdy' : 'fragile';
+          const lifespan = quality === 'sturdy' ? 8 : 5;
+          this.shelters.push({
+            col, row, size,
+            quality,
+            lifespan,
+            timeOccupied: 0,  // only increments while player is inside
+            collapsed: false,
+            collapseFlash: 0, // brief flash timer after collapse
+          });
           break;
         }
         attempts++;
@@ -191,18 +201,35 @@ export class ShelterDash {
     this.playerCol = Math.max(PLAY_MIN_COL, Math.min(PLAY_MAX_COL, this.playerCol));
     this.playerRow = Math.max(PLAY_MIN_ROW, Math.min(PLAY_MAX_ROW, this.playerRow));
 
-    // Check if in shelter
+    // Tick collapse flash timers
+    for (const s of this.shelters) {
+      if (s.collapseFlash > 0) s.collapseFlash -= dt;
+    }
+
+    // Check if in a non-collapsed shelter
     const pCol = Math.round(this.playerCol);
     const pRow = Math.round(this.playerRow);
-    this.isInShelter = this.shelters.some(s =>
+    const currentShelter = this.shelters.find(s =>
+      !s.collapsed &&
       pCol >= s.col && pCol < s.col + s.size &&
       pRow >= s.row && pRow < s.row + s.size
     );
+    this.isInShelter = !!currentShelter;
+
+    // Countdown shelter lifespan while player is inside
+    if (currentShelter) {
+      currentShelter.timeOccupied += dt;
+      if (currentShelter.timeOccupied >= currentShelter.lifespan) {
+        currentShelter.collapsed = true;
+        currentShelter.collapseFlash = 0.5; // flash for 0.5s on collapse
+        this.isInShelter = false;
+      }
+    }
 
     // Apply damage or safety
     if (this.isInShelter) {
       this.timeInShelter += dt;
-      // Minimal damage in shelter (1/sec from residual exposure)
+      // Minimal residual damage in shelter
       this.health = Math.max(0, this.health - 1 * dt);
     } else {
       this.timeExposed += dt;
@@ -244,9 +271,13 @@ export class ShelterDash {
     } else if (outcome === 'barely') {
       effects.morale = -3;
       effects.health = -12;
+      const collapsedCount = this.shelters.filter(s => s.collapsed).length;
+      const shelterNote = collapsedCount > 0
+        ? ` ${collapsedCount} shelter${collapsedCount > 1 ? 's' : ''} gave out.`
+        : '';
       return {
         survived: true,
-        narrative: `The ${this.peril.label.toLowerCase()} battered you between shelters. You made it, but barely.`,
+        narrative: `The ${this.peril.label.toLowerCase()} battered you between shelters.${shelterNote} You made it, but barely.`,
         effects,
       };
     } else {
@@ -311,12 +342,10 @@ export class ShelterDash {
       colorGrid[10][plCol + i] = this.peril.cssClass;
     }
 
-    const instr = '[W/A/S/D] or Arrow Keys to move  |  ^ = Shelter  @ = You';
-    const instrCol = Math.floor((WIDTH - instr.length) / 2);
-    if (instrCol >= 0) {
-      for (let i = 0; i < instr.length; i++) {
-        charGrid[13][instrCol + i] = instr[i];
-      }
+    const instr = '[W/A/S/D] Move  |  ^ Sturdy  ~ Fragile  @ You  |  Shelters collapse — keep moving!';
+    const instrCol = Math.max(0, Math.floor((WIDTH - instr.length) / 2));
+    for (let i = 0; i < instr.length && instrCol + i < WIDTH; i++) {
+      charGrid[13][instrCol + i] = instr[i];
     }
   }
 
@@ -344,20 +373,34 @@ export class ShelterDash {
 
   _renderShelters(charGrid, colorGrid) {
     for (const s of this.shelters) {
+      const flashing = s.collapseFlash > 0;
+
       for (let dr = 0; dr < s.size; dr++) {
         for (let dc = 0; dc < s.size; dc++) {
           const r = s.row + dr;
           const c = s.col + dc;
-          if (r >= 0 && r < HEIGHT && c >= 0 && c < WIDTH) {
-            // Draw shelter as roof/walls
+          if (r < 0 || r >= HEIGHT || c < 0 || c >= WIDTH) continue;
+
+          if (s.collapsed) {
+            // Collapsed: rubble — only show briefly as flash, then as X markers
+            charGrid[r][c] = flashing ? '*' : 'X';
+            colorGrid[r][c] = 'ascii-fire';
+          } else {
+            // Active shelter — roof char signals quality
             if (dr === 0) {
-              charGrid[r][c] = '^';
+              charGrid[r][c] = s.quality === 'sturdy' ? '^' : '~';
             } else if (dc === 0 || dc === s.size - 1) {
               charGrid[r][c] = '|';
             } else {
-              charGrid[r][c] = ' '; // safe interior
+              // Interior center: show time remaining
+              const timeLeft = Math.ceil(s.lifespan - s.timeOccupied);
+              charGrid[r][c] = timeLeft.toString()[0];
             }
-            colorGrid[r][c] = 'ascii-shelter';
+            // Color: gold while healthy, yellowing as timer runs down
+            const pct = 1 - s.timeOccupied / s.lifespan;
+            colorGrid[r][c] = pct > 0.5 ? 'ascii-shelter'
+                            : pct > 0.2 ? 'ascii-player'
+                            :             'ascii-fire';
           }
         }
       }

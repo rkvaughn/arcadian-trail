@@ -708,6 +708,18 @@ body {
   background: rgba(233, 69, 96, 0.1);
 }
 
+/* Choice selection animation — fires on click, held until result loads */
+.choice-btn-chosen {
+  border-color: var(--green);
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--green);
+  font-weight: bold;
+}
+.choice-btn-unchosen {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* Result */
 .result-card {
   text-align: center;

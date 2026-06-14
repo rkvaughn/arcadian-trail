@@ -34,7 +34,14 @@ export class EventPanel {
       btn.className = 'choice-btn';
       btn.textContent = choice.text;
       btn.addEventListener('click', () => {
-        this.onChoice(idx);
+        // Animate the selected choice before loading result
+        choicesDiv.querySelectorAll('.choice-btn').forEach(b => {
+          b.disabled = true;
+          b.classList.add('choice-btn-unchosen');
+        });
+        btn.classList.remove('choice-btn-unchosen');
+        btn.classList.add('choice-btn-chosen');
+        setTimeout(() => this.onChoice(idx), 480);
       });
       choicesDiv.appendChild(btn);
     });

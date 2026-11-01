@@ -45,7 +45,7 @@ function parseWeather(json) {
   else if (condition.includes('cloud')) icon = 'clouds';
   else if (condition.includes('mist') || condition.includes('fog') || condition.includes('haze')) icon = 'mist';
 
-  if (temp > 100) icon = 'hot';
+  if (temp > 100) icon = 'heat';
   if (wind > 35) icon = 'wind';
 
   return {

@@ -7,7 +7,10 @@
  *
  * Public interface is identical to AsciiRenderer:
  *   new PixelRenderer(canvasEl, infoBarEl)
- *   renderer.render(game, weatherData)
+ *   renderer.render(game, weatherData, nowMs?)
+ *
+ * Called every animation frame (requestAnimationFrame) by js/main.js. Scenes
+ * get a fractional frame clock derived from nowMs — see ANIM_TICK_MS.
  */
 
 import { STATES } from '../js/game.js';
@@ -28,14 +31,19 @@ const DAYS_PER_PHASE = 3;
 
 const PROGRESS_BAR_LENGTH = 20;
 
+// Animation clock unit. Scenes were tuned for one frame per 250 ms; keeping
+// that unit preserves their speeds while drawing at display refresh rate.
+const ANIM_TICK_MS = 250;
+
 export class PixelRenderer {
   constructor(canvasEl, infoBarEl) {
     this.canvas  = canvasEl;
     this.infoBar = infoBarEl;
     this.ctx     = canvasEl.getContext('2d');
-    this.frameCount = 0;
     this.lastInfoBarStr = null;
     this.lastTerrain = null;
+    this.lastTerrainAttr = null;
+    this.lastFilter = null;
 
     // Set native resolution; CSS width:100% / height:auto handles display scaling
     this.canvas.width  = CANVAS_W;
@@ -61,8 +69,8 @@ export class PixelRenderer {
     );
   }
 
-  render(game, weatherData) {
-    this.frameCount++;
+  render(game, weatherData, nowMs = performance.now()) {
+    const frame = nowMs / ANIM_TICK_MS;
     const r = this._r.bind(this);
     const ctx = this.ctx;
 
@@ -92,19 +100,23 @@ export class PixelRenderer {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
     if (isEvent) {
-      drawEventScene(r, game.currentEvent.perilType, this.frameCount);
+      drawEventScene(r, game.currentEvent.perilType, frame);
     } else {
-      drawTerrainScene(r, terrain, this.frameCount);
-      drawWeather(r, weatherIcon, this.frameCount);
-      drawVehicle(r, this.frameCount);
+      drawTerrainScene(r, terrain, frame);
+      drawWeather(r, weatherIcon, frame);
+      drawVehicle(r, frame);
     }
 
     // ── Propagate data-terrain to canvas and game-layout parent ─────────────
     // V1: setting on game-layout makes CSS vars (--terrain-sky, --terrain-ground,
     // --terrain-text) cascade to all children: info bar, event panel, dashboard.
+    // Only touch the DOM on change — this runs every animation frame.
     const terrainAttr = isEvent ? `event-${game.currentEvent.perilType}` : terrain;
-    this.canvas.dataset.terrain = terrainAttr;
-    if (this.gameLayout) this.gameLayout.dataset.terrain = terrainAttr;
+    if (terrainAttr !== this.lastTerrainAttr) {
+      this.canvas.dataset.terrain = terrainAttr;
+      if (this.gameLayout) this.gameLayout.dataset.terrain = terrainAttr;
+      this.lastTerrainAttr = terrainAttr;
+    }
 
     // ── Compose day/night + weather into a single CSS filter ─────────────────
     // V3: composing here lets weather tints stack cleanly on top of time-of-day
@@ -114,8 +126,11 @@ export class PixelRenderer {
       Math.floor(game.day / DAYS_PER_PHASE) % TIME_PHASES.length
     ];
     const composed = [this._timeFilter(phase), this._weatherFilter(weatherIcon)]
-      .filter(Boolean).join(' ');
-    this.canvas.style.filter = composed || 'none';
+      .filter(Boolean).join(' ') || 'none';
+    if (composed !== this.lastFilter) {
+      this.canvas.style.filter = composed;
+      this.lastFilter = composed;
+    }
 
     // ── Info bar ────────────────────────────────────────────────────────────
     this._updateInfoBar(game);

@@ -26,6 +26,65 @@
 
 ---
 
+### Phase 6: Real Climate Data per Peril — *proposed 2026-11-01*
+
+> Today the event odds come from (a) live OpenWeatherMap conditions *right now* and (b) one global ΔT per SSP/year. Neither is specific to the place the player is driving through, and live 2026 weather says little about a 2100 run. Waypoints already carry lat/lon (`data/routes.js`), so each one can be tied to real, location-specific hazard data. Precompute it offline into static JSON — no runtime API key, works on GitHub Pages.
+
+#### Standing rule — peril documentation (definition of done)
+
+**Every peril the player can encounter must ship with a documentation file before it is enabled in `data/eventDefs.js`.** One file per event id at `docs/perils/<event_id>.md`, covering:
+
+1. **Data source** — dataset name, publisher, URL/DOI, spatial + temporal resolution, license, date accessed, and the script that pulls it.
+2. **How the game uses it** — which file/function reads it and which mechanic it drives (event weight, severity, duration, resource drain).
+3. **Why it matters for climate risk** — the physical mechanism and who is exposed (plain-language, 1–2 paragraphs).
+4. **How much it is likely to change over time** — projected change under each SSP (SSP2-4.5 / SSP3-7.0 / SSP5-8.5) for 2050 / 2075 / 2100, with the uncertainty range, each number cited to a source in `REFERENCES.md`. Where no published projection exists, say so — do not fill the gap.
+5. **Limitations** — what the data does not capture and any calibration assumptions (with PI confirmation dates).
+
+A short version of each doc should also surface in-game (event panel "Learn more" link and/or `ui/researchSummary.js`).
+
+Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurricane`, `flood`, `road_washout`, `swollen_river`, `king_tide`, `drought`, `heatwave`, `dust_storm`, `tornado`, `flash_freeze`, `grey_famine`, `water_contamination`, `power_outage`, `bridge_collapse`, `quarantine_zone`. Non-climate events (`positive`, `social`, `mechanical`) need a one-line note stating they are design-only.
+
+#### Tasks
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| D1 | Peril doc template + `docs/perils/` scaffold | 1 | 1 | Template with the 5 required sections above. Add a check (script or T3 test) that fails if an enabled event id has no doc. |
+| D2 | Per-waypoint hazard profile pipeline | 5 | 1 | Offline Python script → `data/hazards/waypoints.json`. Candidate source: FEMA National Risk Index (county-level, per-hazard risk for wildfire, hurricane, riverine + coastal flooding, tornado, heat wave, drought, cold wave). Reachable via ArcGIS REST — reuse `~/Projects/utilities/arcgis_rest.py`. |
+| D3 | Peril-specific source datasets | 5 | 2 | Evaluate per peril: USFS Wildfire Risk to Communities; NOAA HURDAT2 (hurricane tracks); NOAA SPC tornado database; NOAA Storm Events Database; NOAA 2022 Sea Level Rise Technical Report + high-tide flooding outlooks (`king_tide`); US Drought Monitor; NOAA HMS smoke / EPA AirNow (`toxic_air`). Verify each source is still online before building on it. |
+| D4 | Location-specific SSP projections | 5 | 2 | Replace the single global ΔT with downscaled CMIP6 projections at each waypoint (candidates: NASA NEX-GDDP-CMIP6, LOCA2). Use for heat days, extreme precip, and drought indices by SSP/year. Fifth National Climate Assessment (NCA5) for regional context. |
+| D5 | Rewire `js/events.js` weighting to hazard JSON | 3 | 3 | Event weight = f(waypoint hazard profile, SSP projection). Keep live weather as flavor text only, or drop it — also resolves T1 (API key). |
+| D6 | Scale currently-unscaled perils | 2 | 3 | Hurricane, tornado, drought, dust storm, flash freeze, and smoke currently get no SSP scaling (or borrow the flood rate). Each needs its own cited relationship — or an explicit "no robust projection" note in its doc. |
+| D7 | In-game "Learn more" from peril docs | 2 | 4 | Event panel link + research summary section built from `docs/perils/`. |
+| D8 | Location-gate place-specific events | 2 | 2 | `terrainBonus` only boosts odds (×1.8), never excludes — e.g. `king_tide` ("The Atlantic is reclaiming the highway") fired in the Phoenix desert during testing on 2026-11-01. Gate on the waypoint's hazard profile from D2 (e.g. coastal flood exposure) instead of a hardcoded terrain list. |
+
+#### Calibration review items (found 2026-11-01 — verify, do not change without PI sign-off)
+
+| # | Item | Notes |
+|---|------|-------|
+| CR1 | `DELTA_T` baseline label | Comment says "above 1995–2014", but the 2100 values match AR6 SPM.1's 1850–1900 baseline. The 2050 values don't clearly match either baseline. Re-check against SPM Table SPM.1. |
+| CR2 | `SLR` SSP5-8.5 2100 = 1.01 m | Labeled as median; check against AR6 WG1 Table 9.9 — this may be the upper end of the likely range, not the median. SLR comes from Ch. 9 / SPM B.5, not "Table SPM.2". |
+| CR3 | `healthDrainDestination` coefficient | Comment derives ~0.03/°C but code uses 0.012; the 0.85 floor has no cited source. |
+| CR4 | `js/weather.js` risk thresholds | 95°F, 110°F, 20%/80% humidity, 30/50 mph wind and the divisors are uncited. Cite them or retire them under D5. |
+| CR5 | `baseProbability` in `data/eventDefs.js` | Game-design values, not climate data — label them as such in the code and in the peril docs. |
+
+---
+
+### Phase 7: Graphics Overhaul — *proposed 2026-11-01*
+
+| # | Task | Points | Priority | Notes |
+|---|------|--------|----------|-------|
+| GX3 | Raise logical resolution | 5 | 2 | 80×45 → 160×90 (or 320×180). Gives room for readable sprites, faces, and detail. Requires rescaling scene helpers. |
+| GX4 | Parallax layers + cached static layers | 3 | 2 | 3–4 scrolling depth layers per terrain (sky / far / mid / road). Pre-render static layers to offscreen canvases so only moving parts redraw each frame. |
+| GX5 | Palette-based lighting | 3 | 3 | Replace CSS `filter` day/night (night is `brightness(0.28)` — muddy) with per-terrain palettes for dawn/day/dusk/night, plus dithered sky gradients. |
+| GX6 | Particle system | 3 | 3 | Embers, ash, smoke plumes, rain splashes, dust, heat shimmer, debris. Shared module used by scenes and mini-games. |
+| GX7 | Data-driven visuals | 3 | 2 | Pairs with Phase 6: water line height from the run's SLR value, smoke density from the waypoint's wildfire/smoke data, sun glare from heat projections. Makes the climate data visible. |
+| GX8 | Character + vehicle sprites | 3 | 3 | Hand-made PNG sprite sheets in `assets/` (vehicle with visible family/cargo, damage states). |
+| GX9 | Event "juice" | 2 | 4 | Screen shake, flash on impact, short animated intro per peril scene. |
+| GX11 | Frogger flood speed-up never triggers | 1 | 4 | `ui/froggerDash.js` checks `weatherData.icon === 'flood'`, but `js/weather.js` never emits `'flood'`. Key it to `'rain'`/`'storm'` or to the event that launched the mini-game. |
+| GX10 | Unique scene per climate event | 5 | 4 | Many event ids share one `perilType` scene (e.g. `drought`, `dust_storm`, `heatwave` all draw `eventHeat`). Give each climate event its own scene. |
+
+---
+
 ### Phase 3b: Mini-Game Polish (5 pts) — *done*
 
 ---
@@ -130,6 +189,8 @@
 | P2-G1 | Route branching at waypoints — `WAYPOINT` state, Safe/Fast route modal, `routeModifier` applied to fuel burn and event chance | 5 | 10 | 2026-06-14 |
 | P2-G2 | Game flag system — `game.flags = {}`, `setsFlag` on event choices, `conditions.flags` gating in `selectEvent()` | 2 | 10 | 2026-06-14 |
 | P2-G3 | Multi-stage linked events — solar_signal→relay_cache and refugees_helped→refugee_stash pairs | 3 | 10 | 2026-06-14 |
+| GX1 | Heat weather now renders — `js/weather.js` emitted `'hot'` but renderer checked `'heat'`; renamed, and added `drawHeatShimmer` overlay to `drawWeather` | 1 | 11 | 2026-11-01 |
+| GX2 | Smooth render loop — `requestAnimationFrame` (~60 fps, was 4 fps) with fractional time-based `frame` clock (1 unit = 250 ms, so animation speeds unchanged); `Math.floor(frame)` at `===`/index sites; DOM writes cached; progress map still throttled to 250 ms | 2 | 11 | 2026-11-01 |
 | P2-G5 | Item consumable limits — `maxUses: N` on first_aid, `game.itemUses = {}` tracker, enforced in `applyChoice()` | 2 | 10 | 2026-06-14 |
 
 ---

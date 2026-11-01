@@ -12,7 +12,7 @@ import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js'
 import { calculateScore } from './scoring.js';
 import { getRandomNarrative } from '../data/narratives.js';
 
-const RENDER_INTERVAL_MS = 250;
+const MAP_RENDER_INTERVAL_MS = 250; // progress map changes slowly; scene renders every frame
 const TRAVEL_SPEED_MS = 2000;
 const WEATHER_FETCH_INTERVAL = 3; // days
 const EVENT_RESULT_DELAY_MS = 1500; // pause before showing continue button
@@ -21,7 +21,8 @@ class GameController {
   constructor() {
     this.game = new Game();
     this.travelInterval = null;
-    this.renderInterval = null;
+    this.renderLoopToken = 0;   // bumped on start/stop; stale rAF callbacks exit
+    this.renderFrameId = null;
     this.travelSpeed = TRAVEL_SPEED_MS;
     this.currentWeather = null;
 
@@ -223,8 +224,7 @@ class GameController {
   _launchMiniGame(type) {
     clearInterval(this.travelInterval);
     this.travelInterval = null;
-    clearInterval(this.renderInterval);
-    this.renderInterval = null;
+    this.stopRenderLoop();
     this.game.state = STATES.MINIGAME;
 
     const progress = this.game.getProgress();
@@ -298,16 +298,30 @@ class GameController {
   }
 
   startRenderLoop() {
-    if (this.renderInterval) clearInterval(this.renderInterval);
-    this.renderInterval = setInterval(() => {
-      this.asciiRenderer.render(this.game, this.currentWeather);
-      this.progressMap.render(this.game);
-    }, RENDER_INTERVAL_MS);
+    this.stopRenderLoop();
+    const token = this.renderLoopToken;
+    let lastMapRender = -Infinity;
+    const loop = (now) => {
+      if (token !== this.renderLoopToken) return;
+      this.asciiRenderer.render(this.game, this.currentWeather, now);
+      if (now - lastMapRender >= MAP_RENDER_INTERVAL_MS) {
+        this.progressMap.render(this.game);
+        lastMapRender = now;
+      }
+      this.renderFrameId = requestAnimationFrame(loop);
+    };
+    this.renderFrameId = requestAnimationFrame(loop);
+  }
+
+  stopRenderLoop() {
+    this.renderLoopToken++;
+    if (this.renderFrameId !== null) cancelAnimationFrame(this.renderFrameId);
+    this.renderFrameId = null;
   }
 
   endGame(isWin) {
     if (this.travelInterval) clearInterval(this.travelInterval);
-    if (this.renderInterval) clearInterval(this.renderInterval);
+    this.stopRenderLoop();
 
     const score = calculateScore(this.game, isWin);
     this.screens.showEnd(isWin, this.game, score);

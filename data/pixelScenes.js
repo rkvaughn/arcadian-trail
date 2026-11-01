@@ -6,6 +6,10 @@
  * x/y/w/h are in logical pixels; color is any CSS color string.
  *
  * Road band: y=32–38. Vehicle: x≈25, y≈22 (placed by renderer, not scenes).
+ *
+ * `frame` is a continuous (fractional) animation clock: 1 unit = 250 ms, the
+ * old fixed tick, so motion speeds are unchanged while drawing runs at display
+ * refresh rate. Use `Math.floor(frame)` for any `===` check or array index.
  */
 
 export const PW = 80;  // logical pixel width
@@ -116,7 +120,7 @@ function road(r, frame) {
 
 export function drawVehicle(r, frame) {
   const osc = Math.round(Math.sin(frame * 0.28) * 1.2);
-  const bounce = frame % 5 === 0 ? -1 : 0;
+  const bounce = Math.floor(frame) % 5 === 0 ? -1 : 0;
   const vx = 24 + osc;
   const vy = 22 + bounce;
 
@@ -151,6 +155,7 @@ export function drawWeather(r, weatherIcon, frame) {
     case 'snow':                 drawSnow(r, frame); break;
     case 'mist': case 'fog':    drawMist(r); break;
     case 'wind':                 drawWind(r, frame); break;
+    case 'heat':                 drawHeatShimmer(r, frame); break;
   }
 }
 
@@ -165,9 +170,10 @@ function drawRain(r, frame, count = 18) {
 }
 
 function drawLightning(r, frame) {
-  if (frame % 18 === 0) {
+  const tick = Math.floor(frame);
+  if (tick % 18 === 0) {
     r(0, 0, PW, PH, 'rgba(220,230,255,0.18)');
-    const lx = (frame * 37) % (PW - 4);
+    const lx = (tick * 37) % (PW - 4);
     r(lx + 2, 0, 1, 14, '#ffffcc');
     r(lx, 8, 4, 1, '#ffffcc');
     r(lx + 1, 9, 2, 8, '#ffffcc');
@@ -186,6 +192,17 @@ function drawSnow(r, frame) {
 function drawMist(r) {
   r(0, 20, PW, 4, 'rgba(200,220,230,0.4)');
   r(0, 28, PW, 3, 'rgba(200,220,230,0.25)');
+}
+
+// Rising, wavering heat-haze dashes just above the road
+function drawHeatShimmer(r, frame) {
+  for (let i = 0; i < 4; i++) {
+    const y = 30 - ((frame * 0.5 + i * 3) % 12);
+    const sway = Math.round(Math.sin(frame * 0.2 + i * 1.7) * 3);
+    for (let x = -14 + (i * 5) % 14; x < PW; x += 14) {
+      r(x + sway, y, 9, 1, 'rgba(255,210,120,0.18)');
+    }
+  }
 }
 
 function drawWind(r, frame) {
@@ -239,7 +256,7 @@ function sceneDesert(r, frame) {
   r(61, 4, 8, 4, '#ffd040');
   r(62, 2, 6, 1, '#ffe080');
   // Heat shimmer lines (subtle)
-  if (frame % 3 === 0) r(0, 22, PW, 1, 'rgba(255,200,100,0.15)');
+  if (Math.floor(frame) % 3 === 0) r(0, 22, PW, 1, 'rgba(255,200,100,0.15)');
   // Sand dunes
   r(0, 24, PW, 8, '#c4873a');
   hill(r, 10, 24, 28, 7, '#b87030');
@@ -490,7 +507,7 @@ function sceneValley(r, frame) {
 // ── EVENT SCENES ─────────────────────────────────────────────────────────────
 
 function eventWildfire(r, frame) {
-  const flicker = frame % 3;
+  const flicker = Math.floor(frame) % 3;
   r(0, 0, PW, 24, '#cc4400');
   r(0, 14, PW, 10, '#882200');
   // Smoke
@@ -573,8 +590,9 @@ function eventHeat(r, frame) {
   r(53, 4, 14, 6,  '#fff080');
   r(56, 1, 8, 1,   '#ffffff');
   // Shimmer lines (horizontal)
-  if (frame % 4 === 0) r(0, 20, PW, 1, 'rgba(255,220,100,0.25)');
-  if (frame % 4 === 2) r(0, 24, PW, 1, 'rgba(255,220,100,0.2)');
+  const tick = Math.floor(frame);
+  if (tick % 4 === 0) r(0, 20, PW, 1, 'rgba(255,220,100,0.25)');
+  if (tick % 4 === 2) r(0, 24, PW, 1, 'rgba(255,220,100,0.2)');
   // Parched earth
   r(0, 24, PW, 8, '#8a5a18');
   // Cracks

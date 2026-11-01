@@ -455,9 +455,10 @@ export const eventDefs = [
     choices: [
       {
         text: 'Share supplies and rest',
+        setsFlag: 'refugees_helped',
         outcomes: {
           effects: { food: -10, water: -8, morale: 15, health: 5 },
-          narrative: 'You share what you can. In return: information about the road ahead, and a renewed sense of purpose.'
+          narrative: 'You share what you can. In return: information about the road ahead, and a renewed sense of purpose. They remember your plates.'
         }
       },
       {
@@ -730,9 +731,10 @@ export const eventDefs = [
     choices: [
       {
         text: 'Siphon power for batteries',
+        setsFlag: 'solar_signal',
         outcomes: {
           effects: { fuel: 15 },
-          narrative: 'You hook up the jumper cables. The hum of electricity fills the air. The tank is saved.'
+          narrative: 'You hook up the jumper cables. The hum of electricity fills the air. The tank is saved. You broadcast your coordinates on the emergency frequency before you leave.'
         }
       },
       {
@@ -813,5 +815,58 @@ export const eventDefs = [
         }
       }
     ]
-  }
+  },
+  {
+    id: 'relay_cache',
+    name: 'Emergency Relay Cache',
+    perilType: 'positive',
+    baseProbability: 0.12,
+    terrainBonus: ['plains', 'desert', 'urban'],
+    conditions: { flags: ['solar_signal'] },
+    description: 'A hand-lettered sign on a highway overpass: "SIGNAL HEARD — CACHE BELOW." Your earlier broadcast made it through.',
+    choices: [
+      {
+        text: 'Collect the cache',
+        outcomes: {
+          effects: { fuel: 18, water: 12, morale: 8 },
+          narrative: 'Plastic tubs packed with fuel, water, and a note: "Keep going." Someone heard you. Someone helped.'
+        }
+      },
+      {
+        text: 'Leave it for someone who needs it more',
+        outcomes: {
+          effects: { morale: 20 },
+          narrative: 'Your tanks are holding. You leave the cache intact and drive on. The kids argue about whether that was stupid or brave.'
+        }
+      }
+    ]
+  },
+  {
+    id: 'refugee_stash',
+    name: 'Refugee Stash',
+    perilType: 'positive',
+    baseProbability: 0.11,
+    terrainBonus: ['urban', 'plains', 'hills'],
+    conditions: { flags: ['refugees_helped'] },
+    description: 'A chalk arrow on the guardrail points to a drainage culvert. Inside: supplies, wrapped in a tarp. Someone left this for you.',
+    choices: [
+      {
+        text: 'Take what you need',
+        outcomes: {
+          effects: { food: 20, health: 10, morale: 12 },
+          itemRequired: 'water_purifier',
+          itemBonus: { water: 15 },
+          narrative: 'Canned goods, bandages, a handwritten note: "Good luck." The people from the camp didn\'t forget.',
+          itemNarrative: 'Your purifier handles a water jug that\'s been sitting. You walk away with full tanks and full hearts.'
+        }
+      },
+      {
+        text: 'Take it all — you shared first',
+        outcomes: {
+          effects: { food: 25, water: 15, health: 10, morale: 5 },
+          narrative: 'You load everything. It\'s more than you\'ll use, but the weight of it feels right.'
+        }
+      }
+    ]
+  },
 ];

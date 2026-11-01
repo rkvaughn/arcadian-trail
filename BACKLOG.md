@@ -16,17 +16,13 @@
 
 ## Phased Roadmap
 
-### Phase 4B: Strategic Gameplay Depth (17 pts) — *next*
+### Phase 4B: Strategic Gameplay Depth — *partial* (G4 remaining)
 
 > The SSP system (Phase 5) makes this more valuable: a player choosing SSP5-8.5/2100 should face not just harder event odds but structurally harder route decisions. Route branching and faction reputation pair naturally with the new scenario framing.
 
 | # | Task | Points | Priority | Notes |
 |---|------|--------|----------|-------|
-| P2-G1 | Route branching at waypoints | 5 | 1 | New `WAYPOINT` state in `js/game.js`. At each named waypoint: Safe Route (+20% fuel cost, −30% event chance) vs Fast Route (−10% fuel, +40% event chance). SSP multipliers should compound with route risk choice — SSP5-8.5/Fast Route is brutal. |
-| P2-G2 | Game flag system | 2 | 2 | `game.flags = {}`. Add `setsFlag` to eventDef choices; add `conditions: { flags: ['x'] }` to events. Gate access to multi-stage event payoffs. |
-| P2-G3 | Multi-stage linked events (2–3 pairs) | 3 | 3 | Author 2–3 event pairs where choice A sets a flag → Event B fires later with payoff/consequence. Ideally one pair references the SSP scenario (e.g., solar farm success in SSP2-4.5 vs. abandoned wreckage in SSP5-8.5). |
-| P2-G4 | Faction reputation | 5 | 4 | `game.reputation = {}` per faction (refugees / merchants / militia). Accumulates across run. Expose in dashboard. Gate Iron Caravan trading and refugee checkpoint passage. |
-| P2-G5 | Item consumable limits | 2 | 5 | `maxUses: N` on items; track `game.itemUses = {}`; enforce in event resolution. Makes supply decisions carry more weight, especially under high-drain SSP scenarios. |
+| P2-G4 | Faction reputation | 5 | 1 | `game.reputation = {}` per faction (refugees / merchants / militia). Accumulates across run. Expose in dashboard. Gate Iron Caravan trading and refugee checkpoint passage. |
 
 ---
 
@@ -131,6 +127,10 @@
 | P2-V4 | Event scene card theming — `[data-terrain^="event-"]` CSS rules tint event panel border/glow and event name to peril-type palette | 2 | 8 | 2026-06-13 |
 | G22 | Shelter Dash: sturdy/fragile quality, per-shelter collapse timer (5s fragile / 8s sturdy), interior countdown, rubble flash on collapse | 4 | 9 | 2026-06-14 |
 | FB1 | Event choice animation: selected choice highlights green, unchosen fade to 35%, 480ms before result loads | 1 | 9 | 2026-06-14 |
+| P2-G1 | Route branching at waypoints — `WAYPOINT` state, Safe/Fast route modal, `routeModifier` applied to fuel burn and event chance | 5 | 10 | 2026-06-14 |
+| P2-G2 | Game flag system — `game.flags = {}`, `setsFlag` on event choices, `conditions.flags` gating in `selectEvent()` | 2 | 10 | 2026-06-14 |
+| P2-G3 | Multi-stage linked events — solar_signal→relay_cache and refugees_helped→refugee_stash pairs | 3 | 10 | 2026-06-14 |
+| P2-G5 | Item consumable limits — `maxUses: N` on first_aid, `game.itemUses = {}` tracker, enforced in `applyChoice()` | 2 | 10 | 2026-06-14 |
 
 ---
 

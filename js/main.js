@@ -145,6 +145,20 @@ class GameController {
           this.logger.log(`EVENT: ${result.event.name}`, 'event');
           break;
 
+        case 'waypoint':
+          clearInterval(this.travelInterval);
+          this.travelInterval = null;
+          this.eventPanel.showWaypoint(
+            result.waypointName,
+            result.nextTerrain,
+            (choice) => {
+              this.game.chooseRoute(choice);
+              this.startTravelLoop();
+            }
+          );
+          this.logger.log(`Reached ${result.waypointName} — choose your route.`, 'info');
+          break;
+
         case 'arrived':
           clearInterval(this.travelInterval);
           this.travelInterval = null;

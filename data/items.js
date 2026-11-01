@@ -22,7 +22,8 @@ export const itemDefs = [
     cost: 18,
     weight: 2,
     description: '+15 health when used. Bonus in medical events.',
-    effect: { health: 15 }
+    effect: { health: 15 },
+    maxUses: 2
   },
   {
     id: 'solar_panel',

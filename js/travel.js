@@ -104,6 +104,11 @@ export function travelTick(gameState) {
       if (resource === 'health') rate *= sspMultipliers.healthDrain;
     }
 
+    // Route choice modifier — Safe (+20% fuel) or Fast (-10% fuel) selected at waypoints (G1)
+    if (gameState.routeModifier && resource === 'fuel') {
+      rate *= gameState.routeModifier.fuelMult;
+    }
+
     // Item passive modifiers (multiplier type)
     if (itemPassives[resource] && typeof itemPassives[resource] === 'number' && itemPassives[resource] < 1) {
       rate *= itemPassives[resource];
@@ -158,6 +163,10 @@ export function travelTick(gameState) {
   // Radio item reduces negative event chance slightly
   if (itemPassives.positiveBoost) {
     eventChance *= 0.9;
+  }
+  // Route choice modifier — Safe (-30% events) or Fast (+40% events) (G1)
+  if (gameState.routeModifier) {
+    eventChance *= gameState.routeModifier.eventChanceMult;
   }
   let triggerEvent = Math.random() < eventChance;
 

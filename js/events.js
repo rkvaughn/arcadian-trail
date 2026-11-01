@@ -20,7 +20,7 @@ import { eventDefs } from '../data/eventDefs.js';
  *                                    on top of weather boosts. null = no SSP scaling (fallback).
  * @returns {object} eventDef
  */
-export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = [], sspMultipliers = null) {
+export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = [], sspMultipliers = null, flags = {}) {
   const weights = [];
   let totalWeight = 0;
 
@@ -32,6 +32,15 @@ export function selectEvent(terrain, weatherRisk, inventory, recentPerilTypes = 
     if (lastIdx !== -1) {
       const recency = recentPerilTypes.length - lastIdx; // 1 = most recent, 2 = two ago, etc.
       weight *= recency === 1 ? 0.05 : recency === 2 ? 0.3 : 0.6;
+    }
+
+    // Skip events whose flag conditions aren't met (G2)
+    if (event.conditions?.flags) {
+      if (!event.conditions.flags.every(f => flags[f])) {
+        weights.push({ event, weight: 0 });
+        totalWeight += 0;
+        continue;
+      }
     }
 
     // Terrain bonus
@@ -106,14 +115,22 @@ export function applyChoice(gameState, event, choiceIndex) {
   const outcome = choice.outcomes;
   const effects = { ...outcome.effects };
 
-  // Check for item bonus — show itemNarrative when item helps
+  // Check for item bonus — respects maxUses for consumable items (G5)
   let usedItem = false;
   if (outcome.itemRequired) {
-    const hasItem = gameState.inventory.some(item => item.id === outcome.itemRequired);
-    if (hasItem && outcome.itemBonus) {
-      usedItem = true;
-      for (const [resource, value] of Object.entries(outcome.itemBonus)) {
-        effects[resource] = (effects[resource] || 0) + value;
+    const item = gameState.inventory.find(i => i.id === outcome.itemRequired);
+    if (item && outcome.itemBonus) {
+      const uses = gameState.itemUses?.[item.id] || 0;
+      const hasUsesLeft = !item.maxUses || uses < item.maxUses;
+      if (hasUsesLeft) {
+        usedItem = true;
+        if (item.maxUses) {
+          if (!gameState.itemUses) gameState.itemUses = {};
+          gameState.itemUses[item.id] = uses + 1;
+        }
+        for (const [resource, value] of Object.entries(outcome.itemBonus)) {
+          effects[resource] = (effects[resource] || 0) + value;
+        }
       }
     }
   }
@@ -142,11 +159,17 @@ export function applyChoice(gameState, event, choiceIndex) {
   // Severe health damage from events can kill a party member
   const death = checkEventDeath(gameState, effects, event.perilType);
 
+  // Set game flag if this choice triggers one (G2)
+  if (choice.setsFlag && gameState.flags != null) {
+    gameState.flags[choice.setsFlag] = true;
+  }
+
   return {
     narrative,
     death,
     effects,
-    setsActiveHazard: choice.setsActiveHazard || null
+    setsActiveHazard: choice.setsActiveHazard || null,
+    setsFlag: choice.setsFlag || null
   };
 }
 

@@ -13,6 +13,7 @@ export const STATES = {
   DECISION: 'DECISION',
   RESULT: 'RESULT',
   MINIGAME: 'MINIGAME',
+  WAYPOINT: 'WAYPOINT',
   WIN: 'WIN',
   LOSE: 'LOSE'
 };
@@ -44,6 +45,9 @@ export class Game {
     this.ssp = 'SSP2-4.5';
     this.sspMultipliers = null;
     this.activeHazard = null; // { type, ticksRemaining, drainPerTick: { resource: amount } }
+    this.flags = {};
+    this.itemUses = {};
+    this.routeModifier = null;
   }
 
   setState(newState) {
@@ -91,6 +95,9 @@ export class Game {
     this.recentPerilTypes = [];
     this.perilHistory = [];
     this.activeHazard = null;
+    this.flags = {};
+    this.itemUses = {};
+    this.routeModifier = null;
 
     const sspDef = SSP_DEFS[this.ssp];
     const originDesc = getOriginDescription(originCity, this.ssp);
@@ -125,7 +132,15 @@ export class Game {
     }
 
     if (result.reachedWaypoint) {
-      this.addJournal(`Day ${this.day}: Reached ${result.waypointName}. Terrain: ${result.terrain}.`);
+      this.addJournal(`Day ${this.day}: Reached ${result.waypointName}.`);
+      this.routeModifier = null;
+      this.state = STATES.WAYPOINT;
+      const nextWp = this.route[this.waypointIndex + 1];
+      return {
+        type: 'waypoint',
+        waypointName: result.waypointName,
+        nextTerrain: nextWp ? nextWp.terrain : result.terrain
+      };
     }
 
     if (result.triggerMiniGame) {
@@ -136,7 +151,7 @@ export class Game {
 
     if (result.triggerEvent) {
       const terrain = this.route[this.waypointIndex].terrain;
-      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes, this.sspMultipliers);
+      this.currentEvent = selectEvent(terrain, this.weatherRisk, this.inventory, this.recentPerilTypes, this.sspMultipliers, this.flags);
       this.recentPerilTypes.push(this.currentEvent.perilType);
       if (this.recentPerilTypes.length > 3) this.recentPerilTypes.shift();
       this.perilHistory.push(this.currentEvent.perilType);
@@ -193,6 +208,21 @@ export class Game {
     }
 
     return { type: 'result', ...result };
+  }
+
+  /**
+   * Set route modifier for the next leg after a waypoint choice.
+   * Safe: +20% fuel cost, -30% event chance.
+   * Fast: -10% fuel cost, +40% event chance.
+   * SSP multipliers compound on top of route choice.
+   */
+  chooseRoute(choice) {
+    if (choice === 'safe') {
+      this.routeModifier = { fuelMult: 1.2, eventChanceMult: 0.7 };
+    } else {
+      this.routeModifier = { fuelMult: 0.9, eventChanceMult: 1.4 };
+    }
+    this.state = STATES.TRAVELING;
   }
 
   // Continue traveling after viewing event result or mini-game

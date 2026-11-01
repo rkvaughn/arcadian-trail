@@ -720,6 +720,28 @@ body {
   cursor: default;
 }
 
+/* === WAYPOINT ROUTE CHOICE === */
+.waypoint-card .event-name {
+  color: var(--gold);
+}
+.waypoint-desc strong {
+  color: var(--text);
+}
+.waypoint-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+}
+.waypoint-route-name {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+.waypoint-route-stats {
+  font-size: 0.78em;
+  color: var(--text-dim);
+}
+
 /* Result */
 .result-card {
   text-align: center;

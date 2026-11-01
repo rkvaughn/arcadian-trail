@@ -91,6 +91,54 @@ export class EventPanel {
     });
   }
 
+  showWaypoint(waypointName, nextTerrain, onChoice) {
+    this.container.innerHTML = '';
+    this.container.classList.add('active');
+
+    const terrainLabels = {
+      plains: 'Plains', desert: 'Desert', mountain: 'Mountain', forest: 'Forest',
+      coastal: 'Coastal', urban: 'Urban', wetland: 'Wetland', hills: 'Hills', valley: 'Valley'
+    };
+    const terrainLabel = terrainLabels[nextTerrain] || nextTerrain;
+
+    const card = document.createElement('div');
+    card.className = 'event-card waypoint-card';
+    card.innerHTML = `
+      <div class="event-header">
+        <span class="event-icon">📍</span>
+        <h3 class="event-name">${waypointName}</h3>
+      </div>
+      <p class="event-desc waypoint-desc">Next stretch: <strong>${terrainLabel}</strong>. Choose how you run it.</p>
+      <div class="event-choices">
+        <button class="choice-btn waypoint-btn" data-choice="safe">
+          <span class="waypoint-route-name">Safe Route</span>
+          <span class="waypoint-route-stats">+20% fuel · −30% event chance</span>
+        </button>
+        <button class="choice-btn waypoint-btn" data-choice="fast">
+          <span class="waypoint-route-name">Fast Route</span>
+          <span class="waypoint-route-stats">−10% fuel · +40% event chance</span>
+        </button>
+      </div>
+    `;
+
+    card.querySelectorAll('.waypoint-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        card.querySelectorAll('.waypoint-btn').forEach(b => {
+          b.disabled = true;
+          b.classList.add('choice-btn-unchosen');
+        });
+        btn.classList.remove('choice-btn-unchosen');
+        btn.classList.add('choice-btn-chosen');
+        setTimeout(() => {
+          this.hide();
+          onChoice(btn.dataset.choice);
+        }, 350);
+      });
+    });
+
+    this.container.appendChild(card);
+  }
+
   hide() {
     this.container.innerHTML = '';
     this.container.classList.remove('active');

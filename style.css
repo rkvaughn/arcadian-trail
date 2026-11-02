@@ -1350,3 +1350,9 @@ body {
     font-size: 2.5em;
   }
 }
+
+/* Mini-games that take pointer/touch input on the shared canvas */
+.ascii-display.minigame-touch {
+  touch-action: none;
+  cursor: crosshair;
+}

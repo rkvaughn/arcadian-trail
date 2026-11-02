@@ -5,7 +5,7 @@ import { Dashboard } from '../ui/dashboard.js';
 import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
 import { MapOverlay } from '../ui/mapOverlay.js';
-import { ShelterDash } from '../ui/shelterDash.js';
+import { ShedDash, shedModeFor } from '../ui/shedDash.js';
 import { BarricadeRunner } from '../ui/barricadeRunner.js';
 import { FroggerDash } from '../ui/froggerDash.js';
 import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js';
@@ -47,7 +47,7 @@ class GameController {
     const displayEl = document.getElementById('asciiDisplay');
     const infoBarEl = document.getElementById('asciiInfoBar');
     const miniGameEl = document.getElementById('miniGameDisplay');
-    this.shelterDash = new ShelterDash(miniGameEl, infoBarEl);
+    this.shedDash = new ShedDash(displayEl, infoBarEl);
     this.barricadeRunner = new BarricadeRunner(miniGameEl, infoBarEl);
     this.froggerDash = new FroggerDash(displayEl, infoBarEl);
 
@@ -136,7 +136,7 @@ class GameController {
         }
 
         case 'minigame':
-          this._launchMiniGame('SHELTER');
+          this._launchMiniGame('SHELTER', this._shedPerilFromConditions());
           break;
 
         case 'event':
@@ -198,7 +198,11 @@ class GameController {
     // Choice triggers a mini-game instead of immediate effects
     if (result.minigame) {
       this.eventPanel.hide();
-      this._launchMiniGame(result.minigame);
+      const ev = this.game.currentEvent;
+      const peril = ev && shedModeFor(ev.perilType, ev.id);
+      this._launchMiniGame(result.minigame, peril
+        ? { peril, variant: ev.id }
+        : this._shedPerilFromConditions());
       return;
     }
 
@@ -221,7 +225,24 @@ class GameController {
     }
   }
 
-  _launchMiniGame(type) {
+  /**
+   * Peril for a Shed Dash that no event chose (random roadside trigger):
+   * live weather first, then the terrain the family is crossing.
+   */
+  _shedPerilFromConditions() {
+    const w = this.game.weatherRisk || {};
+    if (w.wildfire > 0) return { peril: 'fire', variant: 'wildfire' };
+    if (w.heat > 0) return { peril: 'heat', variant: 'heatwave' };
+    if (w.hurricane > 0) return { peril: 'wind', variant: 'hurricane' };
+    if (w.tornado > 0) return { peril: 'wind', variant: 'tornado' };
+    if (w.flood > 0) return { peril: 'wind', variant: 'flood' };
+    const terrain = this.game.getCurrentWaypoint()?.terrain;
+    if (terrain === 'desert') return { peril: 'heat', variant: 'heatwave' };
+    if (['forest', 'mountain', 'hills', 'valley'].includes(terrain)) return { peril: 'fire', variant: 'wildfire' };
+    return { peril: 'wind', variant: null };
+  }
+
+  _launchMiniGame(type, shed = {}) {
     clearInterval(this.travelInterval);
     this.travelInterval = null;
     this.stopRenderLoop();
@@ -246,10 +267,11 @@ class GameController {
       this.logger.log('CRASH THE BARRICADE! Dodge obstacles and break free!', 'event');
       this.barricadeRunner.start(progress, callback);
     } else {
-      canvasEl.style.display = 'none';
-      miniGameEl.style.display = '';
-      this.logger.log('SHELTER DASH! Find shelter before the storm hits!', 'event');
-      this.shelterDash.start(progress, callback, this.game.weatherRisk);
+      // Shed Dash draws pixel art on the shared canvas, like Frogger
+      canvasEl.style.display = '';
+      miniGameEl.style.display = 'none';
+      this.logger.log('RUN FOR THE SHED! Get the family to cover!', 'event');
+      this.shedDash.start(progress, callback, { ...shed, family: this.game.family });
     }
   }
 

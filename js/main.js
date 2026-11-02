@@ -220,7 +220,7 @@ class GameController {
     this.updateRoster();
 
     if (result.type === 'gameOver') {
-      this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
+      this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS, { final: true });
       this.logger.log(`${result.narrative}`, 'danger');
       setTimeout(() => this.endGame(false), 3000);
       return;
@@ -317,7 +317,8 @@ class GameController {
     this.game.addJournal(`Day ${this.game.day}: ${result.narrative}`);
 
     // Show result in event panel (reuse existing result card UI)
-    this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS);
+    // Game over from mini-game damage gets a final card with no Continue button
+    this.eventPanel.showResult(result, EVENT_RESULT_DELAY_MS, { final: !!this.game.checkGameOver() });
 
     // Restart render loop so normal ASCII display resumes behind the result card
     this.startRenderLoop();

@@ -19,7 +19,6 @@ import { CutscenePlayer } from './cutscenes/director.js';
 import { eventSceneFor, bannerFor } from './cutscenes/index.js';
 import { TravelRenderer, TERRAINS } from './cutscenes/travel/index.js';
 
-const PROGRESS_BAR_LENGTH = 20;
 
 export class PixelRenderer {
   constructor(canvasEl, infoBarEl) {
@@ -110,19 +109,31 @@ export class PixelRenderer {
     );
     const progress = game.getProgress();
     const pct      = Math.round(progress * 100);
-    const filled   = Math.round(progress * PROGRESS_BAR_LENGTH);
-    const bar      =
-      '[' +
-      '='.repeat(Math.max(0, filled - 1)) +
-      (filled > 0 ? '>' : ' ') +
-      ' '.repeat(PROGRESS_BAR_LENGTH - filled) +
-      ']';
 
-    const str = `Day ${game.day} | ${location} (${terrain}) | ${remaining} mi remaining | ${bar} ${pct}%`;
-
-    if (str !== this.lastInfoBarStr) {
-      this.infoBar.textContent = str;
-      this.lastInfoBarStr = str;
+    // Trip HUD: day · place · miles, plus a real progress track. Mini-games
+    // overwrite the bar's text while they run, so rebuild the structure if gone.
+    let hud = this.infoBar.querySelector('.trip-hud');
+    if (!hud) {
+      this.infoBar.innerHTML = `
+        <div class="trip-hud">
+          <span class="trip-day"></span>
+          <span class="trip-place"></span>
+          <span class="trip-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <span class="trip-fill"></span><span class="trip-car"></span>
+          </span>
+          <span class="trip-miles"></span>
+        </div>`;
+      hud = this.infoBar.querySelector('.trip-hud');
+      this.lastInfoBarStr = null;
     }
+    const str = `${game.day}|${location}|${terrain}|${remaining}|${pct}`;
+    if (str === this.lastInfoBarStr) return;
+    this.lastInfoBarStr = str;
+    hud.querySelector('.trip-day').textContent = `Day ${game.day}`;
+    hud.querySelector('.trip-place').textContent = `${location} · ${terrain}`;
+    hud.querySelector('.trip-miles').textContent = `${remaining} mi · ${pct}%`;
+    const track = hud.querySelector('.trip-track');
+    track.style.setProperty('--trip-progress', `${pct}%`);
+    track.setAttribute('aria-valuenow', String(pct));
   }
 }

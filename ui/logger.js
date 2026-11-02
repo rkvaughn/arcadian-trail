@@ -8,7 +8,9 @@ export class Logger {
     entry.className = `log-entry log-${type}`;
     entry.textContent = message;
     this.container.insertBefore(entry, this.container.firstChild);
-    entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Newest entries are on top: scroll the log box itself, never the page
+    // (page scrolling would push the event pop-up off screen on phones)
+    this.container.scrollTop = 0;
 
     // Keep log manageable
     while (this.container.children.length > 50) {

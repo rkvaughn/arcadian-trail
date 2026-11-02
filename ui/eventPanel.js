@@ -11,9 +11,20 @@ export class EventPanel {
    * @param {object} [context] — { waypoint } where the event fired; used to
    *   attach real-world data (e.g. HUTrackDB landfall record for hurricanes)
    */
+  // Phones stack the stage above the dashboard and journal; bring the pop-up
+  // (pinned to the top of the stage) into view whenever a new card opens.
+  _reveal() {
+    if (window.matchMedia?.('(max-width: 768px) and (orientation: portrait)').matches) {
+      this.container.closest('.game-map-section')?.scrollIntoView({ block: 'start' });
+    }
+  }
+
   show(event, context = {}) {
     this.container.innerHTML = '';
-    this.container.classList.add('active');
+    this._reveal();
+    this.container.classList.remove('collapsed');
+    // Event pop-ups arrive a beat after the cut scene starts (see .is-event in CSS)
+    this.container.classList.add('active', 'is-event');
 
     const perilIcons = {
       wildfire: '\uD83D\uDD25', hurricane: '\uD83C\uDF00', flood: '\uD83C\uDF0A',
@@ -30,12 +41,23 @@ export class EventPanel {
       <div class="event-header">
         <span class="event-icon">${icon}</span>
         <h3 class="event-name">${event.name}</h3>
+        <button type="button" class="popup-peek" aria-pressed="false"
+                title="Fold this card to watch the scene">\u{1F441}</button>
       </div>
+      <div class="event-body">
       <p class="event-desc">${event.description}</p>
       ${event.perilType === 'hurricane' && context.waypoint
         ? hurricaneCardHtml(context.waypoint.name) : ''}
       <div class="event-choices"></div>
+      </div>
     `;
+
+    // Peek: fold the card to its title bar to see the cut scene, tap again to unfold
+    const peek = card.querySelector('.popup-peek');
+    peek.addEventListener('click', () => {
+      const folded = this.container.classList.toggle('collapsed');
+      peek.setAttribute('aria-pressed', String(folded));
+    });
 
     const choicesDiv = card.querySelector('.event-choices');
     event.choices.forEach((choice, idx) => {
@@ -99,8 +121,17 @@ export class EventPanel {
     return el;
   }
 
-  showResult(result, delay = 1500) {
+  /**
+   * @param {object} result
+   * @param {number} delay       ms before the Continue button appears
+   * @param {object} [opts]      { final: true } for a game-over card (no Continue)
+   */
+  showResult(result, delay = 1500, opts = {}) {
     this.container.innerHTML = '';
+    this._reveal();
+    // Also reached straight from a mini-game, when the panel was hidden
+    this.container.classList.remove('is-event', 'collapsed');
+    this.container.classList.add('active');
 
     const card = document.createElement('div');
     card.className = 'event-card result-card';
@@ -135,10 +166,13 @@ export class EventPanel {
       <p class="result-narrative">${result.narrative}</p>
       <div class="result-effects">${effectsHtml}</div>
       ${deathHtml}
-      <button class="btn-continue" id="btn-continue" style="display:none">Continue Journey</button>
+      ${opts.final
+        ? '<p class="result-final">The journey ends here\u2026</p>'
+        : '<button class="btn-continue" id="btn-continue" style="display:none">Continue Journey</button>'}
     `;
 
     this.container.appendChild(card);
+    if (opts.final) return;   // game over: the end screen follows on its own
 
     // Delay before showing continue button so player can read the result
     const btn = document.getElementById('btn-continue');
@@ -154,6 +188,8 @@ export class EventPanel {
 
   showWaypoint(waypointName, nextTerrain, onChoice) {
     this.container.innerHTML = '';
+    this._reveal();
+    this.container.classList.remove('is-event', 'collapsed');
     this.container.classList.add('active');
 
     const terrainLabels = {
@@ -202,6 +238,6 @@ export class EventPanel {
 
   hide() {
     this.container.innerHTML = '';
-    this.container.classList.remove('active');
+    this.container.classList.remove('active', 'is-event', 'collapsed');
   }
 }

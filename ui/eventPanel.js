@@ -42,6 +42,8 @@ export class EventPanel {
       const btn = document.createElement('button');
       btn.className = 'choice-btn';
       btn.textContent = choice.text;
+      const odds = context.odds?.[idx];
+      if (odds) btn.appendChild(this._oddsEl(odds));
       btn.addEventListener('click', () => {
         // Animate the selected choice before loading result
         choicesDiv.querySelectorAll('.choice-btn').forEach(b => {
@@ -56,6 +58,45 @@ export class EventPanel {
     });
 
     this.container.appendChild(card);
+  }
+
+  // "62% success · First Aid Kit +15% · 2× Water Bottles +12%"
+  _oddsEl(odds) {
+    const el = document.createElement('span');
+    el.className = 'choice-odds';
+    if (odds.minigame) {
+      const tag = document.createElement('span');
+      tag.className = 'odds-chance odds-action';
+      tag.textContent = 'Action! Your skill decides';
+      el.appendChild(tag);
+      for (const label of odds.labels.length ? odds.labels : ['No supplies help here']) {
+        const chip = document.createElement('span');
+        chip.className = 'odds-item' + (odds.labels.length ? '' : ' odds-none');
+        chip.textContent = label;
+        el.appendChild(chip);
+      }
+      return el;
+    }
+    const pct = Math.round(odds.chance * 100);
+    const tier = pct >= 75 ? 'odds-good' : pct >= 60 ? 'odds-fair' : 'odds-poor';
+    const chance = document.createElement('span');
+    chance.className = `odds-chance ${tier}`;
+    chance.textContent = `${pct}% success`;
+    el.appendChild(chance);
+    for (const h of odds.helpers) {
+      const chip = document.createElement('span');
+      chip.className = 'odds-item' + (h.consumes ? ' odds-item-consumable' : '');
+      chip.textContent = `${h.count > 1 ? h.count + '× ' : ''}${h.name} +${Math.round(h.bonus * 100)}%`;
+      chip.title = h.consumes ? 'Used up if you choose this' : 'Reusable gear';
+      el.appendChild(chip);
+    }
+    if (!odds.helpers.length) {
+      const none = document.createElement('span');
+      none.className = 'odds-item odds-none';
+      none.textContent = 'No supplies help here';
+      el.appendChild(none);
+    }
+    return el;
   }
 
   showResult(result, delay = 1500) {
@@ -75,11 +116,22 @@ export class EventPanel {
       }).join(' ');
     }
 
+    let rollHtml = '';
+    if (result.roll) {
+      const pct = Math.round(result.roll.chance * 100);
+      const used = result.roll.used.map(u => `${u.count > 1 ? u.count + '× ' : ''}${u.name}`).join(', ');
+      rollHtml = `<p class="result-roll ${result.roll.success ? 'roll-success' : 'roll-fail'}">
+        ${result.roll.success ? '\u2714 Success' : '\u2718 Failed'} <span class="roll-chance">(${pct}% chance)</span>
+        ${used ? `<span class="roll-used">Supplies: ${used}</span>` : ''}
+      </p>`;
+    }
+
     const deathHtml = result.death
       ? `<p class="result-death">\u2620\uFE0F ${result.death.message}</p>`
       : '';
 
     card.innerHTML = `
+      ${rollHtml}
       <p class="result-narrative">${result.narrative}</p>
       <div class="result-effects">${effectsHtml}</div>
       ${deathHtml}

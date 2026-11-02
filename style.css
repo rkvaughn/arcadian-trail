@@ -1405,3 +1405,92 @@ body {
   touch-action: none;
   cursor: crosshair;
 }
+
+/* ── Supplies & odds on event choices ───────────────────────────────────── */
+.choice-odds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 0.72em;
+}
+
+.odds-chance {
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.odds-good   { color: var(--green); }
+.odds-fair   { color: var(--yellow); }
+.odds-poor   { color: var(--red); }
+.odds-action { color: var(--gold); }
+
+.odds-item {
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  color: var(--text);
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.odds-item-consumable {
+  border-style: dashed;
+}
+
+.odds-none {
+  color: var(--text-dim);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: none;
+}
+
+.result-roll {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.roll-success { color: var(--green); }
+.roll-fail    { color: var(--red); }
+
+.roll-chance,
+.roll-used {
+  font-weight: normal;
+  color: var(--text-dim);
+  font-size: 0.85em;
+}
+
+.roll-used {
+  display: block;
+}
+
+/* Stackable supplies (water bottles) */
+.item-qty {
+  width: 4.5em;
+  padding: 2px 4px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.item-fill {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-size: 0.8em;
+  background: var(--bg-input);
+  color: var(--gold);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.item-helps {
+  width: 100%;
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.85em;
+  font-style: italic;
+}

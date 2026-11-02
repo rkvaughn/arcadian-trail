@@ -1,85 +1,122 @@
 /**
- * shedDash.js — "Run for the Shed" survival mini-game (replaces Shelter Dash)
+ * shedDash.js — "Run for the Shed": an 8-bit side-scrolling dash
  *
- * The family dashes across an open field toward a rickety shed while the
- * peril that triggered the event interferes, each in its own way:
+ * Original NES-era-style platformer (chunky 8×8 tiles, bold limited palette,
+ * black-outlined sprites, blocky 3×5 pixel font). The family runs right
+ * across a scrolling field to a rickety shed while the peril interferes:
  *
- *   HEAT  — sluggish, drifting movement; stamina drains while running and only
- *           recovers in tree shade; exhausted runners stagger and slow.
- *   WIND  — gusts (telegraphed) shove the group; flying debris knocks you back;
- *           ducking in the lee of rocks/cars blocks most of the push.
- *           Storm variants (hurricane / flood) add slowing standing water.
- *   FIRE  — embers flare into flames ahead of you; a fire front advances from
- *           behind; smoke drifts across the field.
+ *   HEAT — sluggish, slippery movement and shorter jumps; stamina drains as you
+ *          run and only recovers in tree shade; cacti hurt.
+ *   WIND — strong, telegraphed gusts shove you (worst mid-jump); crouch or stand
+ *          in the lee of crates/cars to brace; debris flies low (jump it) or
+ *          high (duck it). Hurricane/flood variants add rain and flooded pits.
+ *   FIRE — ground vents smoke, then burst into flame columns; a wall of fire
+ *          chases you; burning embers fall from above.
  *
- * Renders pixel art to the shared <canvas id="asciiDisplay"> at 160×90 logical
- * px (2 canvas px each) — twice the detail of the travel scene.
+ * Renders to the shared <canvas id="asciiDisplay"> at 160×90 logical px (2×).
+ * All numeric constants are GAMEPLAY TUNING (px, px/s, health points), not
+ * climate data. Outcome effects match the original Shelter Dash.
  *
- * All numeric constants here are GAMEPLAY TUNING (speeds in logical px/s,
- * damage in health points), not climate data. Outcome effects reuse the values
- * of the original Shelter Dash so game balance is unchanged.
- *
- * Public interface (same callback contract as the other mini-games):
+ * Public interface (same contract as the other mini-games):
  *   new ShedDash(canvasEl, infoBarEl)
- *   .start(progress, onComplete, { peril, variant, family })
+ *   .start(progress, onComplete, { peril, variant, family, perks })
  *   .stop()
- *   onComplete({ survived, narrative, effects })
+ *   onComplete({ survived, narrative, effects, used })
  */
 
-const LW = 160;          // logical width
-const LH = 90;           // logical height
-const S = 2;             // canvas px per logical px
-const HUD_H = 11;        // HUD band height (logical)
-const FIELD_TOP = HUD_H + 1;
+// ── Screen & world ───────────────────────────────────────────────────────────
+const LW = 160, LH = 90, S = 2;
+const T = 8;                 // tile size (logical px)
+const ROWS = 12;             // world rows (bottom row partly below the screen)
+const HUD_H = 10;
+const INTRO_SECONDS = 2.8;
+const END_SECONDS = 2.4;
+const BARELY_HEALTH = 20;    // same threshold as the original Shelter Dash
+const FOLLOW_DELAY = 0.2;    // seconds between family members replaying the leader's path
 
-const INTRO_SECONDS = 2.6;
-const END_SECONDS = 2.2;
-const BARELY_HEALTH = 20; // same threshold as the original Shelter Dash
-const FOLLOW_GAP = 4.5;   // spacing between family members in the line
-
-// ── Gameplay tuning per peril ────────────────────────────────────────────────
+// ── Movement tuning ──────────────────────────────────────────────────────────
+const BASE = {
+  run: 62, accel: 420, airAccel: 260, friction: 560, gravity: 460,
+  jump: 182, jumpCut: 0.45, coyote: 0.09, buffer: 0.12,
+};
 const MODES = {
-  heat: {
-    label: 'HEAT WAVE',
-    hint: 'Sluggish & slippery. Rest in tree shade to recover stamina.',
-    accel: 75, friction: 1.7, maxSpeed: 27, drain: 3.0,
-  },
-  wind: {
-    label: 'HIGH WINDS',
-    hint: 'Gusts shove you. Shelter behind rocks & cars. Dodge debris!',
-    accel: 165, friction: 6, maxSpeed: 38, drain: 2.2,
-  },
-  fire: {
-    label: 'WILDFIRE',
-    hint: 'Embers flare into flames. Outrun the fire front!',
-    accel: 165, friction: 6, maxSpeed: 38, drain: 1.8,
-  },
+  heat: { label: 'HEAT WAVE', hint: 'SLUGGISH & SLIPPERY. REST IN SHADE.',
+          run: 0.78, accel: 0.45, friction: 0.28, jump: 0.92, drain: 1.5 },
+  wind: { label: 'HIGH WINDS', hint: 'GUSTS SHOVE YOU. CROUCH OR HIDE!',
+          run: 1, accel: 1, friction: 1, jump: 1, drain: 1.1 },
+  fire: { label: 'WILDFIRE', hint: 'TIME THE FLAMES. FIRE IS BEHIND YOU!',
+          run: 1, accel: 1, friction: 1, jump: 1, drain: 0.9 },
 };
-
 const VARIANT_LABELS = {
-  hurricane: 'HURRICANE', tornado: 'TORNADO', flood: 'FLASH FLOOD',
-  heatwave: 'HEAT WAVE', drought: 'DROUGHT HEAT', dust_storm: 'DUST STORM',
-  wildfire: 'WILDFIRE',
+  hurricane: 'HURRICANE', tornado: 'TORNADO', flood: 'FLASH FLOOD', heatwave: 'HEAT WAVE',
+  drought: 'DROUGHT HEAT', dust_storm: 'DUST STORM', wildfire: 'WILDFIRE',
 };
 
-const PALETTES = {
-  heat: { ground: ['#c9a35a', '#bf9850', '#d4ae66', '#b48b45'], tuft: '#8e7a3a', tuftHi: '#a8924a',
-          tint: 'rgba(255,236,190,0.10)' },
-  wind: { ground: ['#5d7a48', '#56713f', '#668552', '#4d6838'], tuft: '#3f5a30', tuftHi: '#7a9a5e',
-          tint: 'rgba(25,35,50,0.22)' },
-  fire: { ground: ['#8f7d3c', '#857237', '#9c8946', '#76662f'], tuft: '#6a5a26', tuftHi: '#b09a50',
-          tint: 'rgba(120,40,0,0.10)' },
+// ── Palettes (original picks in a limited 8-bit spirit) ─────────────────────
+const K = '#000000', W = '#fcfcfc';
+const PAL = {
+  heat: { sky: ['#f8b800', '#fcd060', '#fce0a8'], far: '#e45c10', farHi: '#f88838', mid: '#ac7c00',
+          grass: '#d8b858', grassHi: '#f8e8a0', dirt: '#a85808', dot: '#7c3c00', hud: '#f8b800' },
+  wind: { sky: ['#3c4c6c', '#58688c', '#7c8ca8'], far: '#2c3c4c', farHi: '#44566a', mid: '#1c4c2c',
+          grass: '#3cb83c', grassHi: '#88f070', dirt: '#7c4c1c', dot: '#503000', hud: '#9cc8fc' },
+  fire: { sky: ['#2c0808', '#881000', '#f83800'], far: '#1c0606', farHi: '#3c0c0c', mid: '#3c0e0e',
+          grass: '#887000', grassHi: '#c8a020', dirt: '#5c3c1c', dot: '#2c1c0c', hud: '#f87858' },
+};
+const SHIRTS = ['#d82800', '#0058f8', '#f8b800', '#00a800', '#9878f8', '#f87858'];
+const SKINS = ['#fcbcb0', '#c87c40', '#8c4c20', '#e0a070', '#fcd8a8', '#a86030'];
+const HAIRS = ['#503000', '#000000', '#7c3c00', '#000000', '#f8b800', '#503000'];
+
+// ── Sprites (8 wide; o=outline s=skin h=hair c=shirt p=pants E=eye) ──────────
+const HEAD = ['..oooo..', '.ohhhho.', '.ohssso.', '.osssEo.', '..osso..'];
+const BLANK = '........';
+const SPR = {
+  stand:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', '.opoopo.', '.opoopo.', '.oo..oo.'],
+  walkA:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', 'opo..opo', 'op....po', 'oo....oo'],
+  walkB:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', '.oppppo.', '..oppo..', '..oooo..'],
+  jump:   [...HEAD, '.occccos', '.occcco.', '.occcco.', '.oppppo.', 'opo..opo', 'oo....oo', BLANK],
+  crouch: [BLANK, BLANK, BLANK, BLANK, '..oooo..', '.ohhhho.', '.ohssso.', '.osssEo.',
+           '.occcco.', 'osccccso', '.oppppo.', '.oo..oo.'],
+  down:   [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK,
+           '.ooooooo', 'ohssccpp', 'ohssccpp', '.ooooooo'],
 };
 
-const SHIRTS = ['#e94560', '#3a7bd5', '#f3c623', '#2ecc71', '#9b59b6', '#ff8c42'];
-const SKINS = ['#f1c27d', '#c68642', '#8d5524', '#e0ac69', '#ffdbac', '#a0673a'];
+// ── Blocky 3×5 pixel font (rows separated by spaces) ─────────────────────────
+const FONT_ROWS = {
+  A: '.#. #.# ### #.# #.#', B: '##. #.# ##. #.# ##.', C: '.## #.. #.. #.. .##', D: '##. #.# #.# #.# ##.',
+  E: '### #.. ##. #.. ###', F: '### #.. ##. #.. #..', G: '.## #.. #.# #.# .##', H: '#.# #.# ### #.# #.#',
+  I: '### .#. .#. .#. ###', J: '..# ..# ..# #.# .#.', K: '#.# #.# ##. #.# #.#', L: '#.. #.. #.. #.. ###',
+  M: '#.# ### ### #.# #.#', N: '##. #.# #.# #.# #.#', O: '.#. #.# #.# #.# .#.', P: '##. #.# ##. #.. #..',
+  Q: '.#. #.# #.# ##. .##', R: '##. #.# ##. #.# #.#', S: '.## #.. .#. ..# ##.', T: '### .#. .#. .#. .#.',
+  U: '#.# #.# #.# #.# ###', V: '#.# #.# #.# #.# .#.', W: '#.# #.# ### ### #.#', X: '#.# #.# .#. #.# #.#',
+  Y: '#.# #.# .#. .#. .#.', Z: '### ..# .#. #.. ###',
+  0: '### #.# #.# #.# ###', 1: '.#. ##. .#. .#. ###', 2: '##. ..# .#. #.. ###', 3: '##. ..# .#. ..# ##.',
+  4: '#.# #.# ### ..# ..#', 5: '### #.. ##. ..# ##.', 6: '.## #.. ### #.# ###', 7: '### ..# .#. .#. .#.',
+  8: '### #.# ### #.# ###', 9: '### #.# ### ..# ##.',
+  '!': '.#. .#. .#. ... .#.', '.': '... ... ... ... .#.', '-': '... ... ### ... ...', '%': '#.# ..# .#. #.. #.#',
+  ':': '... .#. ... .#. ...', "'": '.#. .#. ... ... ...', '?': '##. ..# .#. ... .#.', '/': '..# ..# .#. #.. #..',
+  '+': '... .#. ### .#. ...', '&': '.#. #.# .#. #.# .##', ',': '... ... ... .#. #..',
+  '<': '..# .#. #.. .#. ..#', '>': '#.. .#. ..# .#. #..',
+};
+const FONT = Object.fromEntries(Object.entries(FONT_ROWS).map(([k, v]) => [k, v.replace(/ /g, '')]));
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
-function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+function irand(lo, hi) { return Math.floor(rand(lo, hi + 1)); }
+function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
-/** Map an event peril/id to a mini-game mode. Exported for tests and main.js. */
+// Split text into lines of at most `max` characters
+function wrap(text, max) {
+  const lines = [];
+  let cur = '';
+  for (const word of text.split(' ')) {
+    if ((cur + ' ' + word).trim().length > max) { lines.push(cur.trim()); cur = word; } else cur += ' ' + word;
+  }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines;
+}
+
+/** Map an event peril/id to a mini-game mode. */
 export function shedModeFor(perilType, eventId) {
   if (perilType === 'wildfire' && eventId !== 'toxic_air') return 'fire';
   if (perilType === 'heat') return 'heat';
@@ -96,7 +133,6 @@ export class ShedDash {
     this._rafId = null;
     this.buf = document.createElement('canvas');
     this.bctx = this.buf.getContext('2d');
-    this.ground = document.createElement('canvas');
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -107,33 +143,34 @@ export class ShedDash {
     this.cfg = MODES[this.mode];
     this.variant = opts.variant || null;
     this.label = VARIANT_LABELS[this.variant] || this.cfg.label;
-    this.pal = PALETTES[this.mode];
+    this.pal = PAL[this.mode];
     this.stormy = this.mode === 'wind' && ['hurricane', 'flood'].includes(this.variant);
+    this.perks = opts.perks || {};
+    this.used = {};
+    this.drinksLeft = this.perks.drinks || 0;
     const t = clamp(progress || 0, 0, 1);
-    this.diff = { drain: lerp(1, 1.6, t), hazard: lerp(1, 1.5, t) };
+    this.diff = { t, drain: lerp(1, 1.5, t), hazard: lerp(1.1, 1.6, t) };
 
-    // Canvas setup (own resolution; clear day/night filter while we play)
-    this.canvas.width = LW * S;
-    this.canvas.height = LH * S;
-    this.buf.width = LW * S;
-    this.buf.height = LH * S;
-    this.ground.width = LW * S;
-    this.ground.height = LH * S;
-    for (const c of [this.ctx, this.bctx]) c.imageSmoothingEnabled = false;
+    this.canvas.width = this.buf.width = LW * S;
+    this.canvas.height = this.buf.height = LH * S;
+    this.ctx.imageSmoothingEnabled = this.bctx.imageSmoothingEnabled = false;
     this._savedFilter = this.canvas.style.filter;
     this.canvas.style.filter = 'none';
 
-    // Family: everyone still alive follows the leader
     const members = (opts.family || []).filter(m => m.alive !== false);
     const n = clamp(members.length || 3, 1, 6);
     this.family = Array.from({ length: n }, (_, i) => ({
-      shirt: SHIRTS[i % SHIRTS.length],
-      skin: SKINS[(i * 2 + 1) % SKINS.length],
-      small: typeof members[i]?.age === 'number' && members[i].age < 13,
-      x: 0, y: 0, hurt: 0,
+      shirt: SHIRTS[i % SHIRTS.length], skin: SKINS[(i * 2 + 1) % SKINS.length], hair: HAIRS[i % HAIRS.length],
+      small: typeof members[i]?.age === 'number' && members[i].age < 13, hurt: 0,
     }));
 
-    this._buildField();
+    this._buildLevel();
+
+    this.leader = {
+      x: this.spawn.x, y: this.spawn.y, w: 6, h: 11, vx: 0, vy: 0, face: 1,
+      onGround: true, coyote: 0, jumpBuf: 0, stun: 0, invuln: 0, crouch: false, walk: 0,
+    };
+    this.history = [];
 
     this.health = 100;
     this.stamina = 100;
@@ -142,24 +179,26 @@ export class ShedDash {
     this.phaseT = 0;
     this.outcome = null;
     this.keys = {};
-    this.pointer = null;
+    this.touches = new Map();
+    this.showTouch = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
     this.shake = 0;
     this.flash = 0;
-    this.stun = 0;
     this.particles = [];
-    this.hazards = [];       // fire spots
-    this.debris = [];        // wind projectiles
-    this.spawnT = 1.2;
-    this.fireFront = -10;
-    this.gust = { state: 'calm', t: rand(1.5, 2.5), force: 0, angle: this.windAngle };
-    this.walk = 0;
-    this.speedFrac = 0;
+    this.debris = [];
+    this.embers = [];
+    this.spawnT = 1.5;
+    this.emberT = 2;
+    this.fireWall = this.spawn.x - 70;
+    this.gust = { state: 'calm', t: rand(1.2, 2), dir: -1, force: 0, t0: 0, dur: 1 };
+    this.camX = 0;
     this.doorShut = false;
+    this.speedFrac = 0;
+    this._banner = null;
 
     this._bindInput();
     this.running = true;
     this._savedInfo = this.infoBar.textContent;
-    this.infoBar.textContent = `${this.label} — run for the shed! Arrow keys / WASD, or tap & hold where to go.`;
+    this.infoBar.textContent = `${this.label} — run for the shed! ←/→ move · ↑/Space jump · ↓ crouch · or use the on-screen buttons.`;
     this._last = performance.now();
     this._rafId = requestAnimationFrame(t2 => this._frame(t2));
   }
@@ -170,31 +209,44 @@ export class ShedDash {
     this._rafId = null;
     this._unbindInput();
     if (this._savedFilter !== undefined) this.canvas.style.filter = this._savedFilter;
-    // Restore the travel text so the renderer's cached info bar stays accurate
     if (this._savedInfo !== undefined) this.infoBar.textContent = this._savedInfo;
   }
 
+  // ── Input ──────────────────────────────────────────────────────────────────
+
   _bindInput() {
-    const keyMap = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r' };
+    const map = {
+      ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'j', KeyW: 'j', Space: 'j',
+      KeyZ: 'j', KeyK: 'j', ArrowDown: 'd', KeyS: 'd',
+    };
     this._kd = (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;   // leave browser shortcuts alone
-      const k = keyMap[e.code]; if (k) { this.keys[k] = true; e.preventDefault(); }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = map[e.code]; if (!k) return;
+      if (k === 'j' && !this.keys.j) this.leader.jumpBuf = BASE.buffer;
+      this.keys[k] = true; e.preventDefault();
     };
-    this._ku = (e) => { const k = keyMap[e.code]; if (k) this.keys[k] = false; };
-    // Map to the canvas content box (the element has a border, and padding on mobile)
+    this._ku = (e) => { const k = map[e.code]; if (k) this.keys[k] = false; };
     const toLogical = (e) => {
-      const b = this.canvas.getBoundingClientRect();
-      const cs = getComputedStyle(this.canvas);
-      const left = b.left + this.canvas.clientLeft + parseFloat(cs.paddingLeft || 0);
-      const top = b.top + this.canvas.clientTop + parseFloat(cs.paddingTop || 0);
-      const w = this.canvas.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
-      const h = this.canvas.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0);
-      return { x: (e.clientX - left) / w * LW, y: (e.clientY - top) / h * LH };
+      const b = this.canvas.getBoundingClientRect(), cs = getComputedStyle(this.canvas);
+      const pl = parseFloat(cs.paddingLeft || 0), pr = parseFloat(cs.paddingRight || 0);
+      const pt = parseFloat(cs.paddingTop || 0), pb = parseFloat(cs.paddingBottom || 0);
+      const left = b.left + this.canvas.clientLeft + pl, top = b.top + this.canvas.clientTop + pt;
+      return { x: (e.clientX - left) / (this.canvas.clientWidth - pl - pr) * LW,
+               y: (e.clientY - top) / (this.canvas.clientHeight - pt - pb) * LH };
     };
-    this._pd = (e) => { this.pointer = toLogical(e); this.canvas.setPointerCapture?.(e.pointerId); e.preventDefault(); };
-    this._pm = (e) => { if (this.pointer) this.pointer = toLogical(e); };
-    this._pu = () => { this.pointer = null; };
-    this._blur = () => { this.keys = {}; this.pointer = null; };   // lost focus: drop held input
+    this._pd = (e) => {
+      this.showTouch = this.showTouch || e.pointerType !== 'mouse';
+      const btn = this._buttonAt(toLogical(e));
+      if (btn) {
+        this.touches.set(e.pointerId, btn);
+        if (btn === 'j') this.leader.jumpBuf = BASE.buffer;
+        this.canvas.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+      }
+    };
+    this._pm = (e) => { if (this.touches.has(e.pointerId)) this.touches.set(e.pointerId, this._buttonAt(toLogical(e))); };
+    this._pu = (e) => { this.touches.delete(e.pointerId); };
+    this._blur = () => { this.keys = {}; this.touches.clear(); };
     window.addEventListener('keydown', this._kd);
     window.addEventListener('keyup', this._ku);
     this.canvas.addEventListener('pointerdown', this._pd);
@@ -220,142 +272,179 @@ export class ShedDash {
     this._kd = null;
   }
 
-  // ── Field generation ───────────────────────────────────────────────────────
-
-  _buildField() {
-    // Shed on the right; door on its left wall
-    this.shed = { x: 134, y: Math.round(rand(FIELD_TOP + 14, LH - 30)), w: 22, h: 22 };
-    this.door = { x: this.shed.x - 3, y: this.shed.y + 10, w: 5, h: 11 };
-    // Leader starts far enough in that the whole line of followers is on screen
-    this.startPos = { x: 6 + (this.family.length - 1) * FOLLOW_GAP, y: Math.round(rand(FIELD_TOP + 18, LH - 18)) };
-
-    // Wind blows across the route (from north or south), varying per gust
-    this.windAngle = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
-    this.windAngle += rand(-0.5, 0.5);
-
-    for (let attempt = 0; attempt < 30; attempt++) {
-      this._placeObstacles(attempt < 20 ? 1 : 0.6);
-      if (this._pathExists()) break;
-    }
-    this._placePools();
-
-    this.family.forEach((m, i) => {
-      m.x = this.startPos.x - i * FOLLOW_GAP; m.y = this.startPos.y;
-      m.vx = 0; m.vy = 0; m.face = 1;
-    });
-
-    this._paintGround();
-  }
-
-  _placeObstacles(density) {
-    const kinds = {
-      heat: ['tree', 'tree', 'tree', 'rock', 'cactus', 'car', 'rock'],
-      wind: ['rock', 'fence', 'car', 'tree', 'rock', 'hay', 'fence'],
-      fire: ['burnt', 'rock', 'car', 'hay', 'burnt', 'rock'],
-    }[this.mode];
-    const sizes = { tree: [6, 6], burnt: [5, 6], rock: [8, 5], cactus: [3, 7], car: [15, 8], fence: [3, 14], hay: [7, 5] };
-    const count = Math.round(rand(11, 15) * density);
-    this.obstacles = [];
-    let guard = 0;
-    while (this.obstacles.length < count && guard++ < 400) {
-      const kind = kinds[Math.floor(Math.random() * kinds.length)];
-      const [w, h] = sizes[kind];
-      // Keep obstacles clear of the family's starting line
-      const minX = Math.max(24, Math.ceil(this.startPos.x) + 8);
-      const o = { kind, w, h, x: Math.round(rand(minX, 124 - w)), y: Math.round(rand(FIELD_TOP + 3, LH - h - 3)) };
-      const clear = this.obstacles.every(p =>
-        o.x > p.x + p.w + 5 || o.x + o.w + 5 < p.x || o.y > p.y + p.h + 5 || o.y + o.h + 5 < p.y);
-      if (clear) this.obstacles.push(o);
-    }
-  }
-
-  _placePools() {
-    this.pools = [];
-    if (!this.stormy) return;
-    for (let i = 0; i < 5; i++) {
-      const p = { x: rand(26, 120), y: rand(FIELD_TOP + 6, LH - 10), rx: rand(7, 12), ry: rand(3.5, 5.5) };
-      if (!this._hitsObstacle(p.x, p.y, 2)) this.pools.push(p);
-    }
-  }
-
-  // Coarse BFS so the shed is always reachable
-  _pathExists() {
-    const C = 4, cols = Math.ceil(LW / C), rows = Math.ceil(LH / C);
-    const blocked = (cx, cy) => {
-      const x = cx * C + C / 2, y = cy * C + C / 2;
-      if (y < FIELD_TOP + 3 || y > LH - 3) return true;
-      return this._hitsObstacle(x, y, 3);
-    };
-    const sx = Math.floor(this.startPos.x / C), sy = Math.floor(this.startPos.y / C);
-    const gx = Math.floor((this.door.x - 2) / C), gy = Math.floor((this.door.y + this.door.h / 2) / C);
-    const seen = new Set([`${sx},${sy}`]);
-    const q = [[sx, sy]];
-    while (q.length) {
-      const [x, y] = q.shift();
-      if (x === gx && y === gy) return true;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows || seen.has(k) || blocked(nx, ny)) continue;
-        seen.add(k); q.push([nx, ny]);
-      }
-    }
-    return false;
-  }
-
-  _hitsObstacle(x, y, pad = 0) {
-    for (const o of this.obstacles) {
-      if (x > o.x - pad && x < o.x + o.w + pad && y > o.y - pad && y < o.y + o.h + pad) return o;
-    }
-    const s = this.shed;
-    if (x > s.x - pad && x < s.x + s.w + pad && y > s.y - pad && y < s.y + s.h + pad) return s;
+  // On-screen buttons (bottom corners); a tap on the upper-right half also jumps.
+  _buttonAt(p) {
+    if (!p) return null;
+    if (p.y < LH - 26) return p.x > LW / 2 ? 'j' : null;
+    if (p.x < 24) return 'l';
+    if (p.x < 48) return 'r';
+    if (p.x > LW - 48 && p.x < LW - 24) return 'd';
+    if (p.x > LW - 24) return 'j';
     return null;
   }
 
-  // Pre-render the textured ground + static shadows once per run
-  _paintGround() {
-    const g = this.ground.getContext('2d');
-    const r = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x * S, y * S, w * S, h * S); };
-    const P = this.pal;
-    r(0, 0, LW, LH, P.ground[0]);
-    // Dithered noise patches
-    for (let i = 0; i < 900; i++) {
-      r(Math.floor(Math.random() * LW), Math.floor(Math.random() * LH), 1, 1, P.ground[1 + (i % 3)]);
-    }
-    for (let i = 0; i < 26; i++) {
-      const cx = rand(0, LW), cy = rand(FIELD_TOP, LH), rad = rand(4, 10);
-      for (let k = 0; k < rad * 6; k++) {
-        const a = rand(0, Math.PI * 2), d = rand(0, rad);
-        r(Math.round(cx + Math.cos(a) * d), Math.round(cy + Math.sin(a) * d * 0.6), 1, 1, P.ground[3]);
+  _input() {
+    const held = new Set(this.touches.values());
+    return {
+      l: this.keys.l || held.has('l'), r: this.keys.r || held.has('r'),
+      j: this.keys.j || held.has('j'), d: this.keys.d || held.has('d'),
+    };
+  }
+
+  // ── Level generation ───────────────────────────────────────────────────────
+
+  _buildLevel() {
+    const d = this.diff.t;
+    const cols = this.cols = Math.round(lerp(80, 100, d));
+    const h = this.ground = new Array(cols).fill(3);
+    this.solids = new Set();              // extra solid tiles: "col,row"
+    this.decor = [];                      // trees, fences, cars (visual)
+    this.cacti = [];                      // heat hazards
+    this.vents = [];                      // fire hazards
+    this.shade = [];
+
+    // Terrain: flat start, varied middle, flat run-up to the shed
+    let c = 10, cur = 3, lastPit = -10;
+    while (c < cols - 14) {
+      const roll = Math.random();
+      if (roll < lerp(0.22, 0.32, d) && c - lastPit > 6) {               // pit (2–3 wide)
+        // Heat makes jumps short, so its pits stay 2 wide
+        const w = this.mode !== 'heat' && Math.random() < lerp(0.35, 0.6, d) ? 3 : 2;
+        for (let k = 0; k < w; k++) h[c + k] = 0;
+        if (w === 3 && Math.random() < 0.4) this._crate(c + 1, ROWS - cur - 3);   // stepping crate
+        lastPit = c + w; c += w;
+      } else if (roll < 0.55) {                                            // step up/down one tile
+        cur = clamp(cur + (Math.random() < 0.5 ? 1 : -1), 2, 4);
+        const run = irand(3, 6);
+        for (let k = 0; k < run && c < cols - 14; k++) h[c++] = cur;
+      } else {                                                             // flat run with an obstacle
+        const run = irand(5, 8);
+        for (let k = 0; k < run && c < cols - 14; k++) h[c + k] = cur;
+        this._obstacle(c + irand(1, Math.max(1, run - 4)), cur);
+        c += run;
       }
     }
-    // Cracked earth (heat) / scorched streaks (fire)
+    for (; c < cols; c++) h[c] = cur;
+    for (let k = 0; k < 10; k++) h[k] = 3;
+
+    // Rickety shed on the final stretch
+    this.shed = { c: cols - 7 };
+    for (let k = this.shed.c - 3; k < cols; k++) h[k] = h[this.shed.c];
+    const gTop = (col) => (ROWS - h[col]) * T;
+    this.shed.x = this.shed.c * T;
+    this.shed.y = gTop(this.shed.c) - 34;
+    this.doorX = this.shed.x + 3;
+
+    // Peril features on clear, flat ground
+    const flatCols = [];
+    for (let col = 14; col < cols - 12; col++) {
+      if (h[col] && h[col - 1] === h[col] && h[col + 1] === h[col] &&
+          !this._extraSolidAt(col, ROWS - h[col] - 1) && !this._extraSolidAt(col, ROWS - h[col] - 2)) flatCols.push(col);
+    }
+    const pick = (n, gap) => {
+      const out = [];
+      for (const col of [...flatCols].sort(() => Math.random() - 0.5)) {
+        if (out.every(o => Math.abs(o - col) >= gap)) out.push(col);
+        if (out.length >= n) break;
+      }
+      return out.sort((a, b) => a - b);
+    };
+    if (this.mode === 'fire') {
+      for (const col of pick(Math.round(lerp(8, 11, d)), 5)) this.vents.push({ col, state: 'idle', t: rand(0.2, 2.5) });
+    }
     if (this.mode === 'heat') {
-      for (let i = 0; i < 40; i++) {
-        let x = rand(0, LW), y = rand(FIELD_TOP, LH);
-        for (let k = 0; k < 6; k++) { r(Math.round(x), Math.round(y), 1, 1, '#9c7a3c'); x += rand(-1.5, 1.5); y += rand(-1, 1); }
+      const trees = pick(4, 14);
+      for (const col of trees) {
+        this.decor.push({ kind: 'tree', col });
+        this.shade.push({ x0: (col - 1) * T, x1: (col + 2) * T });
+      }
+      for (const col of pick(Math.round(lerp(5, 8, d)), 6)) if (trees.every(t => Math.abs(t - col) > 2)) this.cacti.push({ col });
+    } else {
+      for (const col of pick(4, 10)) this.decor.push({ kind: 'tree', col, back: true });
+    }
+
+    this.spawn = { x: 3 * T, y: gTop(3) - 11 };
+
+    // Parallax silhouettes (generated once)
+    this.far = Array.from({ length: 48 }, () => irand(6, 22));
+    this.mid = Array.from({ length: 40 }, () => ({ h: irand(10, 22), kind: Math.random() }));
+    this.clouds = Array.from({ length: 6 }, (_, i) => ({ x: i * 60 + rand(0, 30), y: rand(14, 36), w: irand(3, 5) }));
+  }
+
+  _crate(col, row) { this.solids.add(`${col},${row}`); }
+  _extraSolidAt(col, row) { return this.solids.has(`${col},${row}`); }
+
+  _obstacle(col, hgt) {
+    const top = ROWS - hgt;
+    const r = Math.random();
+    if (r < 0.35) {                                     // crate stack (1–2 high)
+      this._crate(col, top - 1);
+      if (Math.random() < 0.5) this._crate(col, top - 2);
+    } else if (r < 0.6) {                               // wrecked car: 3 wide × 1 high, hop on it
+      for (let k = 0; k < 3; k++) this._crate(col + k, top - 1);
+      this.decor.push({ kind: 'car', col, row: top - 1 });
+    } else if (r < 0.8) {                               // fence: solid, 1 high
+      this._crate(col, top - 1);
+      this.decor.push({ kind: 'fence', col, row: top - 1 });
+    } else {                                            // floating crate ledge
+      this._crate(col, top - 3); this._crate(col + 1, top - 3);
+    }
+  }
+
+  // ── Tile queries ───────────────────────────────────────────────────────────
+
+  _solid(col, row) {
+    if (col < 0 || col >= this.cols) return true;
+    if (row < 0) return false;
+    const h = this.ground[col];
+    if (h > 0 && row >= ROWS - h) return true;
+    return this._extraSolidAt(col, row);
+  }
+
+  // First x at or after `x` standing on two solid ground columns with clear headroom
+  _safeSpotFrom(x) {
+    for (let col = Math.max(0, Math.floor(x / T)); col < this.cols - 1; col++) {
+      const h = this.ground[col];
+      if (h && this.ground[col + 1] && !this._extraSolidAt(col, ROWS - h - 1) && !this._extraSolidAt(col, ROWS - h - 2)) {
+        return Math.max(x, col * T + 1);
       }
     }
-    // Static tufts (animated tufts are drawn live)
-    this.tufts = [];
-    for (let i = 0; i < 70; i++) {
-      const x = Math.round(rand(2, LW - 2)), y = Math.round(rand(FIELD_TOP + 2, LH - 2));
-      if (!this._hitsObstacle(x, y, 2)) this.tufts.push({ x, y, ph: rand(0, 6) });
+    return this.spawn.x;
+  }
+
+  _groundTopAt(x) {
+    const col = clamp(Math.floor(x / T), 0, this.cols - 1);
+    for (let row = 0; row < ROWS; row++) if (this._solid(col, row)) return row * T;
+    return LH + 20;
+  }
+
+  _collide(e, axis) {
+    const c0 = Math.floor(e.x / T), c1 = Math.floor((e.x + e.w - 0.01) / T);
+    const r0 = Math.floor(e.y / T), r1 = Math.floor((e.y + e.h - 0.01) / T);
+    for (let c = c0; c <= c1; c++) {
+      for (let r = r0; r <= r1; r++) {
+        if (!this._solid(c, r)) continue;
+        if (axis === 'x') {
+          if (e.vx > 0) e.x = c * T - e.w; else if (e.vx < 0) e.x = (c + 1) * T;
+          e.vx = 0;
+        } else {
+          if (e.vy > 0) { e.y = r * T - e.h; e.onGround = true; } else if (e.vy < 0) e.y = (r + 1) * T;
+          e.vy = 0;
+        }
+        return true;
+      }
     }
-    // Footpath worn toward the shed (subtle guide)
-    for (let x = this.startPos.x; x < this.door.x; x += 2) {
-      const y = lerp(this.startPos.y, this.door.y + 5, (x - this.startPos.x) / (this.door.x - this.startPos.x));
-      if (Math.random() < 0.55) r(x, Math.round(y + rand(-1, 1)), 2, 1, P.ground[3]);
-    }
+    return false;
   }
 
   // ── Main loop ──────────────────────────────────────────────────────────────
 
   _frame(now) {
     if (!this.running) return;
-    const dt = Math.min(0.05, (now - this._last) / 1000);
+    const dt = Math.min(1 / 30, (now - this._last) / 1000);
     this._last = now;
     this._update(dt);
-    if (!this.running) return;   // _update may have finished the game and handed back the canvas
+    if (!this.running) return;
     this._draw();
     this._rafId = requestAnimationFrame(t => this._frame(t));
   }
@@ -364,270 +453,341 @@ export class ShedDash {
     this.phaseT += dt;
     this.shake = Math.max(0, this.shake - dt * 3);
     this.flash = Math.max(0, this.flash - dt * 2.5);
+    if (this._banner) this._banner.t -= dt;
     this._updateParticles(dt);
-    this._updateAmbient(dt);
+    for (const m of this.family) m.hurt = Math.max(0, m.hurt - dt);
 
     if (this.phase === 'intro') {
-      if (this.phaseT >= INTRO_SECONDS) { this.phase = 'play'; this.phaseT = 0; }
+      if (this.phaseT >= INTRO_SECONDS) { this.phase = 'play'; this.phaseT = 0; this.leader.jumpBuf = 0; }
       return;
     }
     if (this.phase === 'enter' || this.phase === 'collapse') {
       if (this.phase === 'enter') this._animateEntering(dt);
+      else this._settle(dt);
+      this._camera(dt);
       if (this.phaseT >= END_SECONDS) this._finish();
       return;
     }
 
     // ── play ──
     this.elapsed += dt;
-    const leader = this.family[0];
-    const intensity = 1 + this.elapsed / 20;
-
+    const intensity = 1 + this.elapsed / 40;
+    this._updateGust(dt);
     this._moveLeader(dt);
-    this._moveFollowers(dt);
+    this._recordHistory();
+    this._camera(dt);
 
-    // Exposure drain (rises the longer you are out in it)
     let drain = this.cfg.drain * this.diff.drain * intensity;
-    if (this.mode === 'heat') drain *= this._inShade(leader.x, leader.y) ? 0.2 : 1;
+    if (this.mode === 'heat' && this._inShade()) drain *= 0.2;
     this.health -= drain * dt;
 
     if (this.mode === 'heat') this._updateHeat(dt);
     if (this.mode === 'wind') this._updateWind(dt);
     if (this.mode === 'fire') this._updateFire(dt);
-    for (const m of this.family) m.hurt = Math.max(0, m.hurt - dt);
+    this._firstAidCheck();
 
     if (this.health <= 0) {
-      this.health = 0;
-      this.phase = 'collapse'; this.phaseT = 0;
-      this.outcome = 'failed';
-      this.shake = 1;
+      this.health = 0; this.phase = 'collapse'; this.phaseT = 0; this.outcome = 'failed'; this.shake = 1;
       return;
     }
-
-    // Reached the door?
-    const d = this.door;
-    if (leader.x + 2 >= d.x && leader.y >= d.y - 1 && leader.y <= d.y + d.h + 1) {
+    if (this.leader.x + this.leader.w >= this.doorX) {
       this.phase = 'enter'; this.phaseT = 0;
       this.outcome = this.health > BARELY_HEALTH ? 'survived' : 'barely';
-      this._burst(d.x, d.y + d.h / 2, '#ffe9a0', 14);
+      this._burst(this.doorX, this.leader.y + 4, '#f8d878', 16);
     }
   }
 
   _moveLeader(dt) {
-    const L = this.family[0];
-    let ix = (this.keys.r ? 1 : 0) - (this.keys.l ? 1 : 0);
-    let iy = (this.keys.d ? 1 : 0) - (this.keys.u ? 1 : 0);
-    if (this.pointer) {
-      const dx = this.pointer.x - L.x, dy = this.pointer.y - L.y, m = Math.hypot(dx, dy);
-      if (m > 2) { ix = dx / m; iy = dy / m; }
+    const L = this.leader, inp = this._input(), c = this.cfg;
+    const exhausted = this.mode === 'heat' && this.stamina < 12;
+    const run = BASE.run * c.run * (exhausted ? 0.6 : 1);
+    const accel = BASE.accel * c.accel;
+    const jumpV = BASE.jump * c.jump * (exhausted ? 0.92 : 1);
+
+    // Crouch (brace) on the ground
+    const wantCrouch = inp.d && L.onGround;
+    if (wantCrouch !== L.crouch) {
+      if (wantCrouch) { L.y += 4; L.h = 7; L.crouch = true; }
+      else if (!this._solid(Math.floor(L.x / T), Math.floor((L.y - 4) / T)) &&
+               !this._solid(Math.floor((L.x + L.w - 0.01) / T), Math.floor((L.y - 4) / T))) {
+        L.y -= 4; L.h = 11; L.crouch = false;
+      }
     }
-    const im = Math.hypot(ix, iy);
-    if (im > 0) { ix /= im; iy /= im; }
-    if (this.stun > 0) { this.stun -= dt; ix = iy = 0; }
 
-    let maxSpeed = this.cfg.maxSpeed;
-    let accel = this.cfg.accel;
-    if (this.mode === 'heat' && this.stamina < 15) { maxSpeed *= 0.5; accel *= 0.6; }
-    if (this._inPool(L.x, L.y)) maxSpeed *= 0.45;
+    let dir = (inp.r ? 1 : 0) - (inp.l ? 1 : 0);
+    if (L.stun > 0) { L.stun -= dt; dir = 0; }
+    if (L.crouch) dir = 0;
 
-    L.vx += ix * accel * dt;
-    L.vy += iy * accel * dt;
-    // External push (wind)
+    const a = L.onGround ? accel : BASE.airAccel * c.accel;
+    if (dir) {
+      L.vx += dir * a * dt;
+      L.face = dir;
+    } else if (L.onGround) {
+      const f = BASE.friction * c.friction * dt;
+      L.vx = Math.abs(L.vx) <= f ? 0 : L.vx - Math.sign(L.vx) * f;
+    }
+    // Wind
     if (this.mode === 'wind') {
-      const f = this._windForce() * this._leeFactor(L.x, L.y);
-      L.vx += Math.cos(this.gust.angle) * f * dt;
-      L.vy += Math.sin(this.gust.angle) * f * dt;
+      let push = this._windForce();
+      if (L.crouch) push *= 0.25;
+      push *= this._leeFactor() * (this.perks.pushMult || 1);
+      if (!L.onGround) push *= 1.35;           // airborne: nothing to dig your heels into
+      L.vx += push * dt;
     }
-    const fr = Math.max(0, 1 - this.cfg.friction * dt);
-    L.vx *= fr; L.vy *= fr;
-    const sp = Math.hypot(L.vx, L.vy);
-    const cap = maxSpeed * (this.mode === 'wind' ? 1.6 : 1); // wind can shove you past your own top speed
-    if (sp > cap) { L.vx *= cap / sp; L.vy *= cap / sp; }
+    // Your own legs cap at `run`; the wind can shove you past it
+    if (dir && Math.sign(L.vx) === dir && Math.abs(L.vx) > run) {
+      L.vx = dir * Math.max(run, Math.abs(L.vx) - accel * dt);
+    }
+    const cap = run * (this.mode === 'wind' ? 1.9 : 1);
+    if (Math.abs(L.vx) > cap) L.vx = Math.sign(L.vx) * cap;
 
-    // Heat exhaustion stagger
-    let wob = 0;
-    if (this.mode === 'heat' && this.stamina < 25 && sp > 2) wob = Math.sin(this.elapsed * 9) * 7;
+    // Jump: coyote time + buffer + variable height
+    L.coyote = L.onGround ? BASE.coyote : Math.max(0, L.coyote - dt);
+    L.jumpBuf = Math.max(0, L.jumpBuf - dt);
+    if (L.jumpBuf > 0 && L.coyote > 0 && !L.crouch && L.stun <= 0) {
+      L.vy = -jumpV; L.coyote = 0; L.jumpBuf = 0; L.onGround = false;
+      if (this.mode === 'heat') this.stamina -= 6 * this.diff.drain * (this.perks.staminaMult || 1);
+      this._puff(L.x + 3, L.y + L.h);
+    }
+    if (!inp.j && L.vy < 0) L.vy *= Math.pow(BASE.jumpCut, dt * 10);
+    L.vy = Math.min(L.vy + BASE.gravity * dt, 260);
 
-    // Axis-separated collision against obstacles + field bounds
-    const nx = L.x + L.vx * dt, ny = L.y + (L.vy + wob) * dt;
-    if (!this._hitsObstacle(nx, L.y, 2) && nx > 2 && nx < LW - 2) L.x = nx; else L.vx *= -0.2;
-    if (!this._hitsObstacle(L.x, ny, 2) && ny > FIELD_TOP + 3 && ny < LH - 2) L.y = ny; else L.vy *= -0.2;
-    if (Math.abs(L.vx) > 1) L.face = L.vx > 0 ? 1 : -1;
+    L.x += L.vx * dt; this._collide(L, 'x');
+    L.onGround = false;
+    L.y += L.vy * dt; this._collide(L, 'y');
+    if (L.x < this.camX) { L.x = this.camX; L.vx = Math.max(0, L.vx); }   // left edge of the screen
+    L.invuln = Math.max(0, L.invuln - dt);
 
-    this.walk += sp * dt * 0.35;
-    this.speedFrac = sp / this.cfg.maxSpeed;
+    if (L.onGround) {
+      L.walk += Math.abs(L.vx) * dt * 0.18;
+    }
+    this.speedFrac = Math.abs(L.vx) / run;
+
+    // Fell in a pit: hurt, then back to the last safe ground
+    if (L.y > LH + 10) {
+      this._hurt(this.stormy ? 10 : 12, 'fall');
+      this._splash(L.x);
+      if (L.crouch) { L.crouch = false; L.h = 11; }
+      // Scramble out on the far side of the pit: it costs health, never a dead end
+      L.x = this._safeSpotFrom(Math.max(L.x, this.camX + 2));
+      L.y = this._groundTopAt(L.x + 3) - L.h;
+      L.vx = 0; L.vy = 0; L.invuln = 1;
+      this.history = [];
+      // Don't respawn straight into the chasing fire: give a short head start
+      if (this.mode === 'fire') this.fireWall = Math.min(this.fireWall, L.x - 45);
+    }
   }
 
-  // Rope-style following: each member keeps FOLLOW_GAP behind the one ahead,
-  // sliding around obstacles. A member snagged far behind slips through.
-  _moveFollowers(dt) {
-    for (let i = 1; i < this.family.length; i++) {
-      const m = this.family[i], lead = this.family[i - 1];
-      const dx = lead.x - m.x, dy = lead.y - m.y, d = Math.hypot(dx, dy);
-      if (d <= FOLLOW_GAP) continue;
-      const step = Math.min(d - FOLLOW_GAP, this.cfg.maxSpeed * 1.8 * dt + (d - FOLLOW_GAP) * 0.15);
-      const nx = m.x + dx / d * step, ny = m.y + dy / d * step;
-      const snagged = d > FOLLOW_GAP * 3;
-      if (snagged || !this._hitsObstacle(nx, m.y, 1)) m.x = nx;
-      if (snagged || !this._hitsObstacle(m.x, ny, 1)) m.y = ny;
-      if (Math.abs(dx) > 0.5) m.face = dx > 0 ? 1 : -1;
+  _pose(L) {
+    if (!L.onGround) return 'jump';
+    if (L.crouch) return 'crouch';
+    return Math.abs(L.vx) > 4 ? (Math.floor(L.walk) % 2 ? 'walkA' : 'walkB') : 'stand';
+  }
+
+  _recordHistory() {
+    const L = this.leader;
+    this.history.push({ t: this.elapsed, x: L.x, y: L.y + L.h, face: L.face, pose: this._pose(L) });
+    while (this.history.length > 2 && this.history[1].t < this.elapsed - 3) this.history.shift();
+  }
+
+  _followerState(i) {
+    const target = this.elapsed - i * FOLLOW_DELAY;
+    const h = this.history;
+    if (!h.length) return null;
+    for (let k = h.length - 1; k >= 0; k--) if (h[k].t <= target) return h[k];
+    return h[0];
+  }
+
+  // Camera follows the leader and never scrolls back
+  _camera(dt) {
+    const target = clamp(this.leader.x - 56, 0, this.cols * T - LW);
+    const next = this.camX + (target - this.camX) * Math.min(1, dt * 8);
+    this.camX = Math.max(this.camX, next);
+  }
+
+  // ── Hazards ────────────────────────────────────────────────────────────────
+
+  _hurt(amount, kind, kx = 0) {
+    const L = this.leader;
+    const continuous = kind === 'burn' || kind === 'wall';
+    if (L.invuln > 0 && !continuous) return false;
+    let dmg = amount;
+    if ((continuous || kind === 'ember') && this.perks.burnMult) dmg *= this.perks.burnMult;
+    if (kind === 'debris' && this.perks.pushMult) dmg *= this.perks.pushMult;
+    this.health -= dmg;
+    if (!continuous) {
+      L.invuln = 1.0; L.stun = 0.25; L.vx = kx * 90; L.vy = Math.min(L.vy, -70);
+      this.flash = 0.7; this.shake = 0.6;
+      this.family[0].hurt = 0.6;
+    } else {
+      this.flash = Math.max(this.flash, 0.35);
+    }
+    return true;
+  }
+
+  _firstAidCheck() {
+    if (this.perks.firstAid && !this.used.first_aid && this.health > 0 && this.health < 30) {
+      this.health += 30;
+      this.used.first_aid = 1;
+      this._banner = { text: 'FIRST AID!', t: 1.4, color: W };
+      this._burst(this.leader.x + 3, this.leader.y, '#f83800', 10);
     }
   }
 
-  // ── Peril behaviour ────────────────────────────────────────────────────────
+  _inShade() {
+    const cx = this.leader.x + this.leader.w / 2;
+    return this.leader.onGround && this.shade.some(s => cx > s.x0 && cx < s.x1);
+  }
 
   _updateHeat(dt) {
-    const L = this.family[0];
-    const shade = this._inShade(L.x, L.y);
-    if (shade) this.stamina += 32 * dt;
-    else if (this.speedFrac > 0.15) this.stamina -= 20 * this.speedFrac * this.diff.drain * dt;
+    const L = this.leader;
+    const mult = this.perks.staminaMult || 1;
+    if (this._inShade()) this.stamina += 34 * dt;
+    else if (this.speedFrac > 0.15) this.stamina -= 13 * this.speedFrac * this.diff.drain * mult * dt;
     else this.stamina += 3 * dt;
+    // Water bottles: take a drink when stamina gives out
+    if (this.stamina <= 2 && this.drinksLeft > 0) {
+      this.stamina = 65; this.drinksLeft--;
+      this.used.water_bottles = (this.used.water_bottles || 0) + 1;
+      this._banner = { text: 'GULP! WATER', t: 1.2, color: '#3cbcfc' };
+    }
     this.stamina = clamp(this.stamina, 0, 100);
-    if (!shade && Math.random() < dt * 4) this._spawn('sweat', L.x + rand(-2, 2), L.y - 7);
+    for (const c of this.cacti) {
+      const box = { x: c.col * T + 1, y: (ROWS - this.ground[c.col]) * T - 10, w: 6, h: 10 };
+      if (overlap(L, box)) this._hurt(7, 'cactus', L.x + L.w / 2 < box.x + 3 ? -1 : 1);
+    }
+    if (!this._inShade() && Math.random() < dt * 3) this._spawn('sweat', L.x + 3, L.y);
   }
 
   _windForce() {
     const g = this.gust;
-    const breeze = 14;
-    if (g.state === 'gust') return breeze + g.force * Math.sin(Math.PI * clamp(g.t0 / g.dur, 0, 1));
-    return breeze;
+    const breeze = -16;                          // steady headwind
+    if (g.state !== 'gust') return breeze;
+    return breeze + g.dir * g.force * Math.sin(Math.PI * clamp(g.t0 / g.dur, 0, 1));
   }
 
-  // Obstacles upwind block most of the push
-  _leeFactor(x, y) {
-    const ux = -Math.cos(this.gust.angle), uy = -Math.sin(this.gust.angle);
-    for (const d of [3, 6, 9, 12]) {
-      const o = this._hitsObstacle(x + ux * d, y + uy * d, 0);
-      if (o && o !== this.shed) return 0.2;
+  // Standing just downwind of a solid tile at body height blocks most of the push
+  _leeFactor() {
+    const L = this.leader, up = -Math.sign(this._windForce()) || 1;
+    const row = Math.floor((L.y + L.h / 2) / T);
+    for (let k = 1; k <= 2; k++) {
+      const col = Math.floor((up > 0 ? L.x + L.w : L.x) / T) + up * k;
+      if (this._solid(col, row)) return 0.2;
     }
     return 1;
   }
 
-  _updateWind(dt) {
+  _updateGust(dt) {
+    if (this.mode !== 'wind') return;
     const g = this.gust;
     g.t -= dt;
     if (g.state === 'gust') g.t0 += dt;
     if (g.t <= 0) {
-      if (g.state === 'calm') { g.state = 'warn'; g.t = 0.95; g.angle = this.windAngle + rand(-0.6, 0.6); }
-      else if (g.state === 'warn') {
-        g.state = 'gust'; g.dur = rand(1.2, 1.9); g.t = g.dur; g.t0 = 0;
-        g.force = rand(150, 210) * this.diff.hazard; this.shake = Math.max(this.shake, 0.35);
-      } else { g.state = 'calm'; g.t = rand(1.6, 3.0) / this.diff.hazard; }
+      if (g.state === 'calm') {
+        g.state = 'warn'; g.t = this.perks.earlyWarning ? 1.6 : 0.9;
+        g.dir = Math.random() < 0.72 ? -1 : 1;      // mostly headwinds
+      } else if (g.state === 'warn') {
+        g.state = 'gust'; g.dur = rand(1.3, 2.1); g.t = g.dur; g.t0 = 0;
+        g.force = rand(300, 420) * this.diff.hazard; this.shake = Math.max(this.shake, 0.5);
+      } else { g.state = 'calm'; g.t = rand(1.3, 2.6) / this.diff.hazard; }
     }
+  }
 
-    // Flying debris from the upwind edge
+  _updateWind(dt) {
+    const L = this.leader, g = this.gust;
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = rand(0.9, 1.6) / this.diff.hazard * (g.state === 'gust' ? 0.5 : 1);
-      const a = g.angle + rand(-0.25, 0.25), speed = rand(70, 105);
-      const upY = Math.sin(a) > 0 ? FIELD_TOP - 4 : LH + 4;
-      const L = this.family[0];
+      this.spawnT = rand(1.1, 1.8) / this.diff.hazard * (g.state === 'gust' ? 0.6 : 1);
+      const fromRight = g.state === 'gust' ? g.dir < 0 : Math.random() < 0.75;
+      const x = fromRight ? this.camX + LW + 8 : this.camX - 12;
+      const ground = this._groundTopAt(L.x + 3);
+      const high = Math.random() < 0.45;
       this.debris.push({
-        x: clamp(L.x + rand(-45, 55), 10, LW - 10) - Math.cos(a) * 30, y: upY,
-        vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, rot: rand(0, 6), spin: rand(-12, 12),
-        kind: Math.random() < 0.5 ? 'plank' : 'sheet',
+        // low: jump it · high: chest height, crouch under it
+        x, y: high ? ground - 9 : ground - 3, vx: (fromRight ? -1 : 1) * rand(105, 150) * this.diff.hazard,
+        rot: rand(0, 4), kind: Math.random() < 0.5 ? 'plank' : 'tin', high,
       });
     }
     for (const d of this.debris) {
-      d.x += d.vx * dt; d.y += d.vy * dt; d.rot += d.spin * dt;
+      d.x += d.vx * dt; d.rot += dt * 14;
       if (d.dead) continue;
-      for (let i = 0; i < this.family.length; i++) {
-        const m = this.family[i];
-        if (dist(d.x, d.y, m.x, m.y - 3) < 4.5) {
-          d.dead = true;
-          this.health -= i === 0 ? 9 : 6;
-          m.hurt = 0.5; this.flash = 0.6; this.shake = 0.6;
-          if (i === 0) { m.vx += d.vx * 0.55; m.vy += d.vy * 0.55; this.stun = 0.25; }
-          this._burst(m.x, m.y - 3, '#d8c8a8', 8);
-          break;
-        }
+      const box = { x: d.x - 4, y: d.y - 1.5, w: 8, h: 3 };
+      if (overlap(L, box)) {
+        if (this._hurt(9, 'debris', Math.sign(d.vx))) { d.dead = true; this._burst(d.x, d.y, '#c8a060', 8); }
+        continue;
       }
-      if (!d.dead && this._hitsObstacle(d.x, d.y, 0)) { d.dead = true; this._burst(d.x, d.y, '#8a6a40', 5); }
+      if (!d.dead && this._solid(Math.floor(d.x / T), Math.floor(d.y / T))) { d.dead = true; this._burst(d.x, d.y, '#8c6c3c', 5); }
     }
-    this.debris = this.debris.filter(d => !d.dead && d.x > -20 && d.x < LW + 20 && d.y > -20 && d.y < LH + 20);
+    this.debris = this.debris.filter(d => !d.dead && d.x > this.camX - 30 && d.x < this.camX + LW + 30);
+    const rate = g.state === 'gust' ? 70 : g.state === 'warn' ? 35 : 12;
+    for (let i = 0; i < rate * dt; i++) this._spawn('streak', this.camX + rand(0, LW + 20), rand(HUD_H, LH));
+    if (this.stormy) for (let i = 0; i < 80 * dt; i++) this._spawn('rain', this.camX + rand(-10, LW + 10), rand(HUD_H - 10, LH));
   }
 
   _updateFire(dt) {
-    const L = this.family[0];
-    // Advancing fire front from behind
-    this.fireFront += (2.6 + this.elapsed * 0.12) * this.diff.hazard * dt;
-    // Spot fires flare ahead of the family
-    this.spawnT -= dt;
-    if (this.spawnT <= 0) {
-      this.spawnT = rand(0.55, 0.95) / this.diff.hazard;
-      const ignite = (x, y) => {
-        if (x > this.door.x - 10 || y < FIELD_TOP + 3 || y > LH - 3) return false;
-        // Keep the final approach to the door clear so the shed is never walled off
-        if (dist(x, y, this.door.x, this.door.y + this.door.h / 2) < 22) return false;
-        if (dist(x, y, L.x, L.y) < 10 || this._hitsObstacle(x, y, 1)) return false;
-        this.hazards.push({ x, y, r: 0, maxR: rand(4, 7.5), t: 0, warn: 0.85, burn: rand(4, 6.5) });
-        return true;
-      };
-      if (Math.random() < 0.3) {
-        // A broken firebreak across the path: four spots, one gap to thread
-        const x = L.x + rand(30, 50), gap = Math.floor(rand(0, 4));
-        [-12, -4, 4, 12].forEach((dy, k) => { if (k !== gap) ignite(x + rand(-2, 2), L.y + dy); });
-      } else {
-        for (let tries = 0; tries < 8; tries++) {
-          const ahead = Math.random() < 0.7;
-          const x = ahead ? L.x + rand(22, 55) : rand(this.fireFront + 15, 128);
-          const y = ahead ? L.y + rand(-20, 20) : rand(FIELD_TOP + 4, LH - 4);
-          if (ignite(x, y)) break;
-        }
+    const L = this.leader;
+    // The chasing wall of fire (keeps pace with the screen so it never falls far behind)
+    this.fireWall += lerp(13, 17, this.diff.t) * (1 + this.elapsed / 50) * dt;
+    this.fireWall = Math.max(this.fireWall, this.camX - 40);
+    if (L.x < this.fireWall + 6) this._hurt(34 * dt, 'wall');
+    for (let i = 1; i < this.family.length; i++) {
+      const s = this._followerState(i);
+      if (s && s.x < this.fireWall + 4) { this.health -= 5 * (this.perks.burnMult || 1) * dt; this.family[i].hurt = 0.3; }
+    }
+    // Vents: idle → smoke warning → flame burst
+    for (const v of this.vents) {
+      v.t -= dt;
+      if (v.t <= 0) {
+        if (v.state === 'idle') { v.state = 'warn'; v.t = 0.85; }
+        else if (v.state === 'warn') { v.state = 'burn'; v.t = rand(1.0, 1.5); }
+        else { v.state = 'idle'; v.t = rand(1.4, 2.8) / this.diff.hazard; }
+      }
+      const top = (ROWS - this.ground[v.col]) * T;
+      if (v.state === 'warn' && Math.random() < dt * 12) this._spawn('smoke', v.col * T + 4, top - 2);
+      if (v.state === 'burn') {
+        if (Math.random() < dt * 20) this._spawn('ember', v.col * T + rand(1, 7), top - rand(4, 22));
+        if (overlap(L, { x: v.col * T, y: top - 24, w: T, h: 24 })) this._hurt(24 * dt, 'burn');
       }
     }
-    for (const h of this.hazards) {
-      h.t += dt;
-      const burning = h.t > h.warn && h.t < h.warn + h.burn;
-      if (h.t < h.warn) h.r = 1.5;
-      else if (burning) h.r = Math.min(h.maxR, h.r + dt * 9);
-      else h.r = Math.max(0, h.r - dt * 6);
-      h.burning = burning;
-      if (burning && Math.random() < dt * 10) this._spawn('ember', h.x + rand(-h.r, h.r), h.y - rand(0, 4));
-      if (burning && Math.random() < dt * 3) this._spawn('smoke', h.x, h.y - 4);
+    // Falling burning embers
+    this.emberT -= dt;
+    if (this.emberT <= 0) {
+      this.emberT = rand(0.7, 1.4) / this.diff.hazard;
+      this.embers.push({ x: this.camX + rand(30, LW + 20), y: HUD_H - 4, vx: rand(-14, -4), vy: rand(40, 60) });
     }
-    this.hazards = this.hazards.filter(h => h.t < h.warn + h.burn + 6); // ash lingers then fades
-
-    for (let i = 0; i < this.family.length; i++) {
-      const m = this.family[i];
-      let hot = m.x < this.fireFront + 5 ? 1 : 0;
-      for (const h of this.hazards) if (h.burning && dist(m.x, m.y - 2, h.x, h.y) < h.r + 1.5) hot = 1;
-      if (!hot) continue;
-      // Followers cut corners behind the leader, so they take less than the leader
-      this.health -= (i === 0 ? 30 : 6) * dt;
-      if (m.hurt <= 0) {
-        m.hurt = 0.5; this.flash = Math.max(this.flash, 0.5);
-        if (i === 0) {
-          this.stun = 0.3; this.shake = 0.5;
-          const h = this.hazards.find(z => z.burning && dist(m.x, m.y, z.x, z.y) < z.r + 3);
-          const ax = h ? m.x - h.x : 1, ay = h ? m.y - h.y : 0, am = Math.hypot(ax, ay) || 1;
-          m.vx = ax / am * 45; m.vy = ay / am * 45;
-        }
-      }
+    for (const e of this.embers) {
+      e.x += e.vx * dt; e.y += e.vy * dt;
+      if (e.dead) continue;
+      if (overlap(L, { x: e.x - 1, y: e.y - 1, w: 3, h: 3 })) {
+        if (this._hurt(6, 'ember', 0)) { e.dead = true; this._burst(e.x, e.y, '#f8b800', 6); }
+      } else if (this._solid(Math.floor(e.x / T), Math.floor(e.y / T))) { e.dead = true; this._burst(e.x, e.y, '#f87858', 4); }
     }
-  }
-
-  _inShade(x, y) {
-    if (this.mode !== 'heat') return false;
-    return this.obstacles.some(o => (o.kind === 'tree' || o.kind === 'car') &&
-      x > o.x - 1 && x < o.x + o.w + 7 && y > o.y + o.h - 2 && y < o.y + o.h + 7);
-  }
-
-  _inPool(x, y) {
-    return this.pools.some(p => ((x - p.x) / p.rx) ** 2 + ((y - p.y) / p.ry) ** 2 < 1);
+    this.embers = this.embers.filter(e => !e.dead && e.y < LH + 10);
+    for (let i = 0; i < 6 * dt; i++) this._spawn('ember', this.camX + rand(0, LW), LH - rand(0, 30));
   }
 
   // ── Ending ─────────────────────────────────────────────────────────────────
 
+  // Collapsed: let the leader drop to the ground instead of hanging in the air
+  _settle(dt) {
+    const L = this.leader;
+    if (L.y > LH + 10) return;
+    L.vx = 0;
+    L.vy = Math.min(L.vy + BASE.gravity * dt, 260);
+    L.onGround = false;
+    L.y += L.vy * dt; this._collide(L, 'y');
+  }
+
   _animateEntering(dt) {
-    const target = { x: this.door.x + 4, y: this.door.y + this.door.h / 2 + 2 };
-    this.family.forEach((m, i) => {
-      if (this.phaseT < i * 0.18) return;
-      const dx = target.x - m.x, dy = target.y - m.y, d = Math.hypot(dx, dy);
-      if (d < 1.5) { m.inside = true; return; }
-      const s = Math.min(d, 60 * dt);
-      m.x += dx / d * s; m.y += dy / d * s; m.face = 1;
-    });
-    if (this.family.every(m => m.inside) && !this.doorShut) { this.doorShut = true; this.shake = 0.5; }
+    const L = this.leader;
+    if (L.crouch) { L.crouch = false; L.y -= 4; }
+    L.vx = 30; L.onGround = true; L.h = 11;
+    L.y = this._groundTopAt(L.x + 3) - L.h;          // walk in on the ground, even if we arrived mid-jump
+    L.x = Math.min(L.x + 30 * dt, this.doorX + 6);
+    L.walk += 30 * dt * 0.18;
+    this.elapsed += dt;
+    this._recordHistory();
+    if (this.phaseT > 0.5 + this.family.length * FOLLOW_DELAY && !this.doorShut) { this.doorShut = true; this.shake = 0.6; }
   }
 
   _finish() {
@@ -639,447 +799,473 @@ export class ShedDash {
 
   _buildResult() {
     const what = this.label.toLowerCase();
-    // Effect values carried over unchanged from the original Shelter Dash.
+    const used = this.used;
     if (this.outcome === 'survived') {
-      return { survived: true, effects: { morale: 5, health: -5 },
+      return { survived: true, used, effects: { morale: 5, health: -5 },
         narrative: `Through the ${what}, the family piled into a rickety shed and slammed the door. It rattled all night — but it held.` };
     }
     if (this.outcome === 'barely') {
-      return { survived: true, effects: { morale: -3, health: -12 },
+      return { survived: true, used, effects: { morale: -3, health: -12 },
         narrative: `The ${what} nearly took you. The family staggered into the shed scorched, bruised and gasping. You made it, barely.` };
     }
-    return { survived: false, effects: { health: -20, morale: -10 },
+    return { survived: false, used, effects: { health: -20, morale: -10 },
       narrative: `The ${what} was too much. The family collapsed short of the shed and had to crawl to cover once the worst passed.` };
   }
 
-  // ── Particles & ambience ───────────────────────────────────────────────────
+  // ── Particles ──────────────────────────────────────────────────────────────
 
   _spawn(kind, x, y) {
-    const p = { kind, x, y, t: 0 };
-    if (kind === 'ember') Object.assign(p, { vx: rand(-4, 4), vy: rand(-14, -6), life: rand(0.6, 1.3) });
-    if (kind === 'smoke') Object.assign(p, { vx: rand(3, 8), vy: rand(-5, -2), life: rand(2.5, 4), r: rand(3, 6) });
-    if (kind === 'sweat') Object.assign(p, { vx: rand(-6, 6), vy: rand(-10, -4), life: 0.5 });
-    if (kind === 'spark') Object.assign(p, { vx: rand(-25, 25), vy: rand(-25, 25), life: rand(0.3, 0.6) });
-    if (kind === 'rain') Object.assign(p, { life: 0.5 });
-    if (kind === 'streak') Object.assign(p, { life: rand(0.4, 0.8), len: rand(5, 11) });
+    const p = { kind, x, y, t: 0, life: 1 };
+    if (kind === 'ember') Object.assign(p, { vx: rand(-5, 5), vy: rand(-18, -8), life: rand(0.5, 1.1) });
+    if (kind === 'smoke') Object.assign(p, { vx: rand(-4, 4), vy: rand(-12, -6), life: rand(0.8, 1.4), r: rand(2, 3.5) });
+    if (kind === 'sweat') Object.assign(p, { vx: rand(-8, 8), vy: rand(-14, -6), life: 0.5 });
+    if (kind === 'spark') Object.assign(p, { vx: rand(-40, 40), vy: rand(-50, 10), life: rand(0.3, 0.6) });
+    if (kind === 'puff') Object.assign(p, { vx: rand(-10, 10), vy: rand(-6, -2), life: 0.35 });
+    if (kind === 'streak') Object.assign(p, { life: rand(0.3, 0.6), len: irand(4, 9) });
+    if (kind === 'rain') Object.assign(p, { life: 0.6 });
     this.particles.push(p);
+    return p;
   }
-
-  _burst(x, y, color, n) {
-    for (let i = 0; i < n; i++) { this._spawn('spark', x, y); this.particles[this.particles.length - 1].color = color; }
-  }
-
-  _updateAmbient(dt) {
-    if (this.mode === 'wind') {
-      const g = this.gust;
-      const rate = g.state === 'gust' ? 90 : g.state === 'warn' ? 45 : 16;
-      for (let i = 0; i < rate * dt; i++) this._spawn('streak', rand(-10, LW + 10), rand(FIELD_TOP, LH));
-      if (this.stormy) for (let i = 0; i < 70 * dt; i++) this._spawn('rain', rand(0, LW), rand(FIELD_TOP - 5, LH));
-    }
-    if (this.mode === 'fire') {
-      for (let i = 0; i < 10 * dt; i++) this._spawn('ember', rand(0, LW), rand(FIELD_TOP + 10, LH));
-      if (Math.random() < dt * 2) this._spawn('smoke', Math.max(0, this.fireFront) + rand(-4, 4), rand(FIELD_TOP, LH));
-    }
-  }
+  _burst(x, y, color, n) { for (let i = 0; i < n; i++) this._spawn('spark', x, y).color = color; }
+  _puff(x, y) { for (let i = 0; i < 3; i++) this._spawn('puff', x, y); }
+  _splash(x) { for (let i = 0; i < 10; i++) this._spawn('spark', x, LH - 6).color = this.stormy ? '#3cbcfc' : '#7c4c1c'; }
 
   _updateParticles(dt) {
-    const g = this.gust;
-    const wx = this.mode === 'wind' ? Math.cos(g.angle) : 0, wy = this.mode === 'wind' ? Math.sin(g.angle) : 0;
-    const wSpeed = this.mode === 'wind' ? (g.state === 'gust' ? 120 : 60) : 0;
+    const g = this.gust, wind = this.mode === 'wind' ? (g.state === 'gust' ? g.dir * 150 : -50) : 0;
     for (const p of this.particles) {
       p.t += dt;
-      if (p.kind === 'streak' || p.kind === 'rain') {
-        p.x += wx * wSpeed * dt + (p.kind === 'rain' ? wx * 20 * dt : 0);
-        p.y += wy * wSpeed * dt + (p.kind === 'rain' ? 90 * dt : 0);
-      } else {
-        p.x += (p.vx || 0) * dt; p.y += (p.vy || 0) * dt;
-        if (p.kind === 'sweat') p.vy += 40 * dt;
-      }
+      if (p.kind === 'streak') p.x += wind * dt;
+      else if (p.kind === 'rain') { p.x += wind * 0.4 * dt; p.y += 120 * dt; }
+      else { p.x += (p.vx || 0) * dt; p.y += (p.vy || 0) * dt; if (p.kind === 'spark' || p.kind === 'sweat') p.vy += 120 * dt; }
     }
     this.particles = this.particles.filter(p => p.t < p.life);
-    if (this.particles.length > 500) this.particles.splice(0, this.particles.length - 500);
+    if (this.particles.length > 450) this.particles.splice(0, this.particles.length - 450);
   }
 
   // ── Drawing ────────────────────────────────────────────────────────────────
 
   _draw() {
     const c = this.bctx;
+    const cam = Math.round(this.camX);
     const r = (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; c.fillStyle = col; c.fillRect(Math.round(x) * S, Math.round(y) * S, Math.round(w) * S, Math.round(h) * S); };
-    this._r = r;
-    const T = this.elapsed + this.phaseT;
+    const wr = (x, y, w, h, col) => r(x - cam, y, w, h, col);   // world-space rect
+    const T0 = this.elapsed + this.phaseT;
 
-    c.drawImage(this.ground, 0, 0);
-    this._drawPools(r, T);
-    this._drawTufts(r, T);
-    if (this.mode === 'heat') this._drawShade(r);
-    if (this.mode === 'fire') this._drawFireFloor(r, T);
+    this._drawSky(r, T0);
+    this._drawParallax(r, cam, T0);
+    this._drawDecor(wr, cam, T0, true);
+    this._drawTiles(wr, cam);
+    this._drawDecor(wr, cam, T0, false);
+    this._drawShed(wr, T0);
+    if (this.mode === 'heat') this._drawCacti(wr, cam);
+    if (this.mode === 'fire') this._drawVents(wr, cam, T0);
+    this._drawFamily(wr, T0);
+    if (this.mode === 'wind') this._drawDebris(wr);
+    if (this.mode === 'fire') { this._drawEmbers(wr); this._drawFireWall(wr, T0); }
+    this._drawParticles(wr);
+    this._drawOverlay(c, r, T0);
 
-    // Depth-sorted sprites: obstacles, shed, family
-    const sprites = [
-      ...this.obstacles.map(o => ({ y: o.y + o.h, draw: () => this._drawObstacle(r, o, T) })),
-      { y: this.shed.y + this.shed.h, draw: () => this._drawShed(r, T) },
-      ...this.family.map((m, i) => ({ y: m.y, draw: () => this._drawPerson(r, m, i, T) })),
-    ].sort((a, b) => a.y - b.y);
-    for (const s of sprites) s.draw();
-
-    if (this.mode === 'fire') this._drawFlames(r, T);
-    if (this.mode === 'wind') this._drawDebris(c);
-    this._drawParticles(r);
-    this._drawWeatherOverlay(c, r, T);
-
-    // Composite buffer → screen (heat shimmer / shake)
+    // Composite (heat shimmer / shake)
     const ctx = this.ctx;
     ctx.clearRect(0, 0, LW * S, LH * S);
-    const sx = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake * S) : 0;
-    const sy = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake * S) : 0;
+    const sx = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake) * S : 0;
+    const sy = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake) * S : 0;
     if (this.mode === 'heat') {
-      const amp = 1 + (1 - this.health / 100) * 1.5;
-      for (let y = HUD_H * S; y < LH * S; y += 2) {
-        const off = Math.round(Math.sin(y * 0.11 + T * 7) * amp);
+      const amp = 1 + (1 - this.stamina / 100) * 2;
+      for (let y = 0; y < LH * S; y += 2) {
+        const off = y > HUD_H * S ? Math.round(Math.sin(y * 0.09 + T0 * 7) * amp) : 0;
         ctx.drawImage(this.buf, 0, y, LW * S, 2, off + sx, y + sy, LW * S, 2);
       }
-    } else {
-      ctx.drawImage(this.buf, sx, sy);
-    }
-    if (this.flash > 0) { ctx.fillStyle = `rgba(255,60,40,${this.flash * 0.25})`; ctx.fillRect(0, 0, LW * S, LH * S); }
+    } else ctx.drawImage(this.buf, sx, sy);
+    if (this.flash > 0) { ctx.fillStyle = `rgba(248,56,0,${this.flash * 0.3})`; ctx.fillRect(0, 0, LW * S, LH * S); }
 
-    this._drawHUD(ctx, T);
-    if (this.phase === 'intro') this._drawIntro(ctx);
-    if (this.phase === 'enter' || this.phase === 'collapse') this._drawEndBanner(ctx);
+    const hr = (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; ctx.fillStyle = col; ctx.fillRect(Math.round(x) * S, Math.round(y) * S, Math.round(w) * S, Math.round(h) * S); };
+    this._drawHUD(hr, T0);
+    if (this.showTouch && this.phase === 'play') this._drawButtons(hr);
+    if (this.phase === 'intro') this._drawIntro(hr, T0);
+    if (this.phase === 'enter' || this.phase === 'collapse') this._drawEnd(hr);
   }
 
-  _drawTufts(r, T) {
+  // Blocky pixel text. scale = logical px per font pixel.
+  _text(r, str, x, y, color, scale = 1, align = 'left', shadow = true) {
+    const s = String(str).toUpperCase();
+    const width = s.length * 4 * scale - scale;
+    let cx = Math.round(align === 'center' ? x - width / 2 : align === 'right' ? x - width : x);
+    for (const ch of s) {
+      const g = FONT[ch];
+      if (g) {
+        for (let i = 0; i < 15; i++) {
+          if (g[i] !== '#') continue;
+          const px = cx + (i % 3) * scale, py = y + Math.floor(i / 3) * scale;
+          if (shadow) r(px + scale, py + scale, scale, scale, K);
+          r(px, py, scale, scale, color);
+        }
+      }
+      cx += 4 * scale;
+    }
+  }
+
+  _drawSky(r, T0) {
     const P = this.pal;
-    const g = this.gust;
-    const bend = this.mode === 'wind' ? Math.round(Math.cos(g.angle) * (g.state === 'gust' ? 2 : 1)) : 0;
-    for (const t of this.tufts) {
-      const sway = this.mode === 'wind' ? bend + Math.round(Math.sin(T * 6 + t.ph)) * (g.state === 'gust' ? 1 : 0) : Math.round(Math.sin(T * 1.5 + t.ph) * 0.4);
-      r(t.x, t.y, 1, 2, P.tuft);
-      r(t.x - 1 + sway, t.y - 1, 1, 1, P.tuftHi);
-      r(t.x + 1 + sway, t.y - 1, 1, 1, P.tuftHi);
-      r(t.x + sway, t.y - 2, 1, 1, P.tuftHi);
+    r(0, 0, LW, LH, P.sky[0]);
+    r(0, 26, LW, 20, P.sky[1]);
+    r(0, 46, LW, LH - 46, P.sky[2]);
+    for (let x = 0; x < LW; x += 2) {                               // dithered band edges
+      r(x + (x % 4 ? 1 : 0), 25, 1, 1, P.sky[1]);
+      r(x + (x % 4 ? 0 : 1), 45, 1, 1, P.sky[2]);
     }
+    if (this.mode === 'heat') {                                     // blocky sun with pulsing rays
+      const pulse = Math.floor(T0 * 2) % 2;
+      r(122, 14, 16, 16, W); r(120, 16, 20, 12, W); r(124, 12, 12, 20, W);
+      r(124, 16, 12, 12, '#fce0a8');
+      for (const [dx, dy] of [[-6, 20], [24, 20], [18, 4], [0, 4], [18, 34], [0, 34]]) r(122 + dx, 2 + dy, 2 + pulse, 2 + pulse, W);
+    }
+    if (this.mode === 'fire') r(0, LH - 20, LW, 20, '#f87858');
   }
 
-  _drawPools(r, T) {
-    for (const p of this.pools) {
-      for (let dy = -Math.ceil(p.ry); dy <= Math.ceil(p.ry); dy++) {
-        const hw = Math.round(p.rx * Math.sqrt(Math.max(0, 1 - (dy / p.ry) ** 2)));
-        r(p.x - hw, p.y + dy, hw * 2, 1, dy < 0 ? '#3c5f78' : '#33526a');
+  _drawParallax(r, cam, T0) {
+    const P = this.pal;
+    // far mesas / ridges (0.2×)
+    const off = (cam * 0.2) % 16;
+    for (let i = 0; i < 13; i++) {
+      const hgt = this.far[(i + Math.floor(cam * 0.2 / 16)) % this.far.length];
+      const x = i * 16 - off;
+      r(x, 66 - hgt, 16, hgt + 30, P.far);
+      r(x, 66 - hgt, 16, 2, P.farHi);
+      r(x + 2, 66 - hgt + 2, 2, 1, P.farHi);
+    }
+    // clouds / smoke banks
+    for (const cl of this.clouds) {
+      const drift = this.mode === 'wind' ? -T0 * (this.gust.state === 'gust' ? 40 : 14) : T0 * 3;
+      const x = ((cl.x - cam * 0.1 + drift) % 200 + 200) % 200 - 30;
+      const col = this.mode === 'fire' ? '#3c0c0c' : this.mode === 'wind' ? '#2c3c4c' : W;
+      const out = this.mode === 'heat' ? '#f8b800' : K;
+      const w = cl.w * 6;
+      r(x - 1, cl.y + 3, w + 2, 6, out);
+      r(x, cl.y + 2, w, 6, col);
+      r(x + 4, cl.y - 1, w - 10, 4, out); r(x + 5, cl.y, w - 12, 4, col);
+    }
+    // mid silhouettes (0.45×): cacti / burnt snags / bending trees
+    const moff = (cam * 0.45) % 20;
+    for (let i = 0; i < 10; i++) {
+      const m = this.mid[(i + Math.floor(cam * 0.45 / 20)) % this.mid.length];
+      const x = i * 20 - moff, base = 74;
+      if (this.mode === 'heat') {
+        r(x + 8, base - m.h, 4, m.h, P.mid); r(x + 4, base - m.h + 5, 4, 3, P.mid); r(x + 4, base - m.h + 2, 2, 4, P.mid);
+        r(x + 12, base - m.h + 8, 4, 3, P.mid); r(x + 14, base - m.h + 4, 2, 5, P.mid);
+      } else if (this.mode === 'fire') {
+        r(x + 9, base - m.h, 2, m.h, P.mid); r(x + 6, base - m.h + 4, 3, 1, P.mid); r(x + 11, base - m.h + 7, 3, 1, P.mid);
+        if (m.kind > 0.6 && Math.floor(T0 * 6 + i) % 3) r(x + 9, base - m.h - 2, 2, 2, '#f83800');
+      } else {
+        const sway = Math.round(Math.sin(T0 * 3 + i) * (this.gust.state === 'gust' ? 3 : 1));
+        r(x + 9, base - m.h + 8, 2, m.h - 8, P.mid);
+        r(x + 3 + sway, base - m.h, 14, 10, P.mid); r(x + 5 + sway, base - m.h - 3, 10, 4, P.mid);
       }
-      const rip = (T * 4) % 6;
-      r(p.x - p.rx * 0.5 + rip, p.y - 1, 3, 1, '#7fa8c4');
-      r(p.x + p.rx * 0.2 - rip * 0.5, p.y + 1, 2, 1, '#6b94b0');
     }
   }
 
-  _drawShade(r) {
-    for (const o of this.obstacles) {
-      if (o.kind !== 'tree' && o.kind !== 'car') continue;
-      r(o.x, o.y + o.h - 1, o.w + 6, 7, 'rgba(40,30,10,0.32)');
-      r(o.x + 1, o.y + o.h + 6, o.w + 4, 1, 'rgba(40,30,10,0.18)');
-    }
-  }
-
-  _drawFireFloor(r, T) {
-    const f = this.fireFront;
-    if (f > -8) {
-      r(0, FIELD_TOP, Math.max(0, f - 2), LH, '#2a1d14');                      // burned ground
-      for (let y = FIELD_TOP; y < LH; y += 3) r(Math.max(0, f - 6), y, 3, 1, '#4a2a18');
-    }
-    for (const h of this.hazards) {
-      if (h.t > h.warn + 0.4) {                                                  // scorch / ash
-        const a = Math.min(1, (h.warn + h.burn + 6 - h.t) / 2);
-        r(h.x - h.maxR, h.y - h.maxR * 0.5, h.maxR * 2, h.maxR, `rgba(35,25,18,${0.75 * a})`);
+  _drawTiles(wr, cam) {
+    const P = this.pal;
+    const c0 = Math.max(0, Math.floor(cam / T) - 1), c1 = Math.min(this.cols - 1, c0 + Math.ceil(LW / T) + 2);
+    for (let col = c0; col <= c1; col++) {
+      const h = this.ground[col];
+      const x = col * T;
+      if (h > 0) {
+        const top = (ROWS - h) * T;
+        wr(x, top, T, LH - top + 10, P.dirt);
+        for (let y = top + 8; y < LH; y += 8) {                         // dirt pattern
+          const odd = (col + y / 8) % 2;
+          wr(x + (odd ? 1 : 5), y + 2, 2, 1, P.dot);
+          wr(x + (odd ? 5 : 2), y + 5, 1, 1, P.dot);
+          wr(x, y, T, 1, P.dot);
+        }
+        wr(x, top, T, 3, P.grass);                                        // grass cap
+        wr(x, top, T, 1, P.grassHi);
+        wr(x + (col % 3), top + 3, 2, 1, P.grass);
+        if (!this.ground[col - 1] || this.ground[col - 1] < h) wr(x, top, 1, LH - top, K);
+        if (!this.ground[col + 1] || this.ground[col + 1] < h) wr(x + T - 1, top, 1, LH - top, K);
+        wr(x, top - 1, T, 1, K);
+      } else if (this.stormy) {                                          // flooded pit
+        wr(x, LH - 9, T, 10, '#2038ec'); wr(x, LH - 9, T, 1, '#3cbcfc');
       }
-      if (h.t < h.warn) {                                                        // ember warning
-        const pulse = Math.sin(h.t * 22) > 0;
-        r(h.x - 2, h.y - 1, 4, 2, pulse ? '#ff8a2a' : '#c43a10');
-        r(h.x - 1, h.y - 2, 2, 1, '#ffd060');
+      for (let row = 0; row < ROWS; row++) {
+        if (this._extraSolidAt(col, row) && !this._decorAt(col, row)) this._drawCrate(wr, x, row * T);
       }
     }
   }
 
-  _drawFlames(r, T) {
-    const cols = ['#ffe36a', '#ffb02e', '#ff6a1a', '#d8340c'];
-    const flame = (x, y, h, ph) => {
-      const hh = h + Math.round(Math.sin(T * 14 + ph) * 1.5);
-      r(x, y - hh, 2, hh, cols[2]);
-      r(x, y - hh + 2, 2, Math.max(0, hh - 3), cols[1]);
-      r(x, y - Math.round(hh * 0.5), 1, Math.round(hh * 0.4), cols[0]);
-      r(x + (Math.sin(T * 20 + ph) > 0 ? 1 : 0), y - hh - 1, 1, 1, cols[3]);
-    };
-    for (const h of this.hazards) {
-      if (!h.burning && h.r < 1) continue;
-      if (h.t < h.warn) continue;
-      const n = Math.max(1, Math.round(h.r));
-      for (let i = -n; i <= n; i += 2) {
-        const yy = h.y + Math.round(Math.abs(i) * 0.3);
-        flame(h.x + i, yy, Math.round((h.r - Math.abs(i) * 0.5) * 1.4 + 2), i);
+  _decorAt(col, row) {
+    return this.decor.some(d => (d.kind === 'car' && row === d.row && col >= d.col && col < d.col + 3) ||
+                                (d.kind === 'fence' && d.col === col && d.row === row));
+  }
+
+  _drawCrate(wr, x, y) {
+    wr(x, y, T, T, K);
+    wr(x + 1, y + 1, 6, 6, '#c84c0c');
+    wr(x + 1, y + 1, 6, 1, '#fc9838');
+    wr(x + 1, y + 1, 1, 6, '#fc9838');
+    for (let k = 0; k < 6; k++) { wr(x + 1 + k, y + 1 + k, 1, 1, '#7c2c00'); wr(x + 6 - k, y + 1 + k, 1, 1, '#7c2c00'); }
+  }
+
+  _drawDecor(wr, cam, T0, back) {
+    for (const d of this.decor) {
+      const x = d.col * T;
+      if (x < cam - 30 || x > cam + LW + 10) continue;
+      if (d.kind === 'tree' && !!d.back === back) {
+        const top = (ROWS - this.ground[d.col]) * T;
+        const sway = this.mode === 'wind' ? Math.round(Math.sin(T0 * 4 + d.col) * (this.gust.state === 'gust' ? 2 : 1)) : 0;
+        const leaf = this.mode === 'heat' ? ['#88a800', '#b8d838'] : this.mode === 'fire' ? ['#3c1c0c', '#5c2c0c'] : ['#00a800', '#58d854'];
+        if (this.mode === 'heat') wr(x - 8, top - 1, 24, 2, 'rgba(0,0,0,0.25)');   // shade on the ground
+        wr(x + 2, top - 14, 4, 14, K); wr(x + 3, top - 14, 2, 14, '#7c4c1c');
+        wr(x - 7 + sway, top - 25, 22, 13, K);
+        wr(x - 6 + sway, top - 24, 20, 11, leaf[0]);
+        wr(x - 3 + sway, top - 28, 14, 5, K); wr(x - 2 + sway, top - 27, 12, 4, leaf[0]);
+        wr(x - 4 + sway, top - 23, 6, 3, leaf[1]); wr(x + 3 + sway, top - 26, 5, 2, leaf[1]);
+        if (this.mode === 'fire' && Math.floor(T0 * 8 + d.col) % 2) wr(x + 4 + sway, top - 29, 3, 2, '#f83800');
       }
-      r(h.x - h.r, h.y, h.r * 2, 1, 'rgba(255,120,30,0.6)');
-    }
-    // The fire front: a wall of flame
-    const f = this.fireFront;
-    if (f > -6) {
-      for (let y = FIELD_TOP + 2; y < LH; y += 2) flame(Math.round(f + Math.sin(y * 0.7 + T * 3) * 2), y, 5 + (y % 3), y);
+      if (!back && d.kind === 'car') {
+        const y = d.row * T;
+        wr(x, y + 1, 24, 7, K);
+        wr(x + 1, y + 2, 22, 4, '#a81000'); wr(x + 1, y + 2, 22, 1, '#e45c10');
+        wr(x + 5, y - 3, 13, 5, K); wr(x + 6, y - 2, 11, 3, '#a81000');
+        wr(x + 7, y - 2, 4, 2, '#3cbcfc'); wr(x + 12, y - 2, 4, 2, '#3cbcfc');
+        wr(x + 3, y + 5, 5, 3, K); wr(x + 16, y + 5, 5, 3, K);
+        wr(x + 4, y + 6, 3, 1, '#bcbcbc'); wr(x + 17, y + 6, 3, 1, '#bcbcbc');
+        wr(x + 9, y + 3, 3, 2, '#503000');
+      }
+      if (!back && d.kind === 'fence') {
+        const y = d.row * T;
+        wr(x + 1, y - 2, 2, 10, K); wr(x + 5, y - 2, 2, 10, K);
+        wr(x + 1, y - 1, 1, 9, W); wr(x + 5, y - 1, 1, 9, W);
+        wr(x, y + 1, 8, 2, K); wr(x, y + 5, 8, 2, K);
+        wr(x, y + 1, 8, 1, '#bcbcbc'); wr(x, y + 5, 8, 1, '#bcbcbc');
+      }
     }
   }
 
-  _drawObstacle(r, o, T) {
-    const { x, y, w, h } = o;
-    r(x + 1, y + h - 1, w, 2, 'rgba(0,0,0,0.25)');   // contact shadow
-    switch (o.kind) {
-      case 'rock':
-        r(x + 1, y, w - 2, h, '#7d7d84'); r(x, y + 1, w, h - 2, '#7d7d84');
-        r(x + 1, y + 1, w - 3, 1, '#a4a4ac'); r(x + 2, y + h - 2, w - 3, 1, '#5c5c63');
-        break;
-      case 'tree': {
-        const sway = this.mode === 'wind' ? Math.round(Math.sin(T * 3 + x) * 1) : 0;
-        r(x + 2, y + 2, 2, h - 2, '#6a4a2a');
-        const leaf = this.mode === 'heat' ? ['#6b7a2a', '#86963a'] : ['#2e5a26', '#3f7a32'];
-        r(x - 1 + sway, y - 4, w + 2, 5, leaf[0]); r(x + sway, y - 6, w, 3, leaf[0]);
-        r(x + 1 + sway, y - 5, 3, 2, leaf[1]);
-        break;
-      }
-      case 'burnt':
-        r(x + 2, y - 3, 2, h + 3, '#2b1f17'); r(x, y - 1, 2, 1, '#2b1f17'); r(x + 4, y, 2, 1, '#2b1f17');
-        r(x + 2, y - 3, 1, 1, '#ff7a2a');
-        break;
-      case 'cactus':
-        r(x + 1, y - 2, 2, h + 2, '#3f7a32'); r(x - 1, y + 1, 2, 1, '#3f7a32'); r(x - 1, y - 1, 1, 2, '#3f7a32');
-        r(x + 3, y + 2, 1, 1, '#3f7a32'); r(x + 3, y, 1, 2, '#3f7a32'); r(x + 1, y - 2, 1, h, '#5a9a44');
-        break;
-      case 'car':
-        r(x, y + 2, w, h - 3, '#7a3b2a'); r(x + 3, y, w - 6, 3, '#6a3224');
-        r(x + 4, y + 1, 3, 1, '#9cc0cc'); r(x + 8, y + 1, 3, 1, '#9cc0cc');
-        r(x + 1, y + 3, w - 2, 1, '#9a5a3a'); r(x + 2, y + h - 1, 3, 1, '#1a1a1a'); r(x + w - 5, y + h - 1, 3, 1, '#1a1a1a');
-        r(x + 5, y + 4, 2, 2, '#5a2a1a');                                   // rust spot
-        break;
-      case 'fence':
-        for (let k = 0; k < h; k += 5) r(x + 1, y + k, 1, 4, '#7a5a34');
-        r(x, y + 1, 3, 1, '#9a7a4a'); r(x, y + h - 3, 3, 1, '#9a7a4a');
-        r(x + 1, y, 1, h, '#8a6a3c');
-        break;
-      case 'hay':
-        r(x, y, w, h, '#c8a440'); r(x, y + 1, w, 1, '#a88a30'); r(x, y + 3, w, 1, '#a88a30'); r(x + 1, y, 1, h, '#e0c060');
-        break;
+  _drawCacti(wr, cam) {
+    for (const c of this.cacti) {
+      const x = c.col * T, top = (ROWS - this.ground[c.col]) * T;
+      if (x < cam - 10 || x > cam + LW + 10) continue;
+      wr(x + 2, top - 11, 4, 11, K); wr(x + 3, top - 10, 2, 10, '#00a800');
+      wr(x, top - 8, 3, 5, K); wr(x + 1, top - 7, 1, 3, '#00a800');
+      wr(x + 5, top - 9, 3, 4, K); wr(x + 6, top - 8, 1, 2, '#00a800');
+      wr(x + 3, top - 9, 1, 1, '#b8f818'); wr(x + 4, top - 5, 1, 1, '#b8f818');
     }
   }
 
-  // The rickety shed: warped planks with gaps, a crooked rusty roof, a door
-  // that swings in the wind, boarded window, light spilling from inside.
-  _drawShed(r, T) {
+  _drawVents(wr, cam, T0) {
+    for (const v of this.vents) {
+      const x = v.col * T, top = (ROWS - this.ground[v.col]) * T;
+      if (x < cam - 10 || x > cam + LW + 10) continue;
+      wr(x + 1, top, 6, 2, K); wr(x + 2, top, 4, 1, '#503000');                      // charred crack
+      if (v.state === 'warn') wr(x + 2, top - 1, 4, 1, Math.floor(T0 * 16) % 2 ? '#f8b800' : '#f83800');
+      if (v.state === 'burn') {
+        const f = Math.floor(T0 * 14) % 3;
+        const hgt = 20 + f * 2;
+        wr(x, top - hgt, T, hgt, K);
+        wr(x + 1, top - hgt + 1, 6, hgt - 1, '#d82800');
+        wr(x + 2, top - hgt + 4, 4, hgt - 5, '#f87800');
+        wr(x + 3, top - hgt + 8, 2, hgt - 9, '#fce0a8');
+        wr(x + (f === 1 ? 1 : 5), top - hgt - 2, 2, 2, '#f87800');
+      }
+    }
+  }
+
+  // The rickety shed: warped planks with gaps, a crooked tin roof, a lit door
+  _drawShed(wr, T0) {
     const s = this.shed;
-    const wobAmp = this.mode === 'wind' ? (this.gust.state === 'gust' ? 1.2 : 0.5) : 0.3;
-    const wob = Math.round(Math.sin(T * (this.mode === 'wind' ? 9 : 3)) * wobAmp);
-    const shut = this.doorShut;
-    const rattle = shut ? Math.round(Math.sin(T * 30) * Math.max(0, 1 - this.phaseT / 2)) : 0;
-    const x = s.x + wob + rattle, y = s.y;
-
-    r(s.x - 1, y + s.h, s.w + 4, 2, 'rgba(0,0,0,0.3)');                       // shadow
-    const planks = ['#8a6a44', '#7a5a38', '#94744c', '#6e5034'];
-    for (let i = 0; i < s.w; i += 3) {
-      const lean = i > s.w - 7 ? 1 : 0;                                         // back corner sags
-      r(x + i, y + 5 + lean, 2, s.h - 5 - lean, planks[(i / 3) % 4 | 0]);
-      if ((i / 3) % 3 === 1) r(x + i + 2, y + 9, 1, 6, '#2a1c10');              // gap between planks
+    const wob = this.mode === 'wind' ? Math.round(Math.sin(T0 * 9) * (this.gust.state === 'gust' ? 1.4 : 0.6)) : 0;
+    const rattle = this.doorShut ? Math.round(Math.sin(T0 * 34) * Math.max(0, 1.2 - this.phaseT / 1.6)) : 0;
+    const x = s.x + wob + rattle, y = s.y, w = 40, h = 34;
+    wr(x - 1, y + 7, w + 2, h - 7, K);
+    const planks = ['#a85808', '#884000', '#c86c1c', '#7c3c00'];
+    for (let i = 0; i < w; i += 4) {
+      const sag = i > w - 10 ? 1 : 0;
+      wr(x + i, y + 8 + sag, 3, h - 8 - sag, planks[(i / 4) % 4]);
+      wr(x + i, y + 8 + sag, 1, h - 8 - sag, '#e09048');
     }
-    r(x + 9, y + 12, 2, 6, '#3a2a18');                                           // missing plank
-    r(x + 13, y + 8, 5, 4, '#3a2a18'); r(x + 13, y + 8, 5, 1, '#9a7a50');        // boarded window
-    r(x + 13, y + 9, 1, 1, '#9a7a50'); r(x + 15, y + 10, 1, 1, '#9a7a50'); r(x + 17, y + 11, 1, 1, '#9a7a50');
-    // Crooked corrugated roof, rust patches, one loose sheet flapping
-    for (let i = -2; i < s.w + 3; i++) {
-      const sag = Math.round(i * 0.12);
-      r(x + i, y + 1 + sag, 1, 4, i % 2 ? '#8a8f94' : '#70757a');
+    wr(x + 22, y + 18, 3, 8, K);                                                   // missing plank
+    wr(x + 27, y + 12, 9, 7, K); wr(x + 28, y + 13, 7, 5, '#503000');              // boarded window
+    wr(x + 28, y + 13, 7, 1, '#c86c1c'); wr(x + 28, y + 16, 7, 1, '#c86c1c');
+    for (let i = -3; i < w + 4; i++) {                                             // crooked tin roof
+      const sag = Math.round(i * 0.1);
+      wr(x + i, y + 2 + sag, 1, 6, K);
+      wr(x + i, y + 3 + sag, 1, 4, i % 2 ? '#bcbcbc' : '#7c7c7c');
     }
-    r(x + 4, y + 2, 3, 2, '#9a4a20'); r(x + 15, y + 3, 2, 2, '#9a4a20');
-    const flap = Math.round(Math.sin(T * 12) * (this.mode === 'wind' ? 2 : 0.5));
-    r(x + s.w - 4, y + 1 + flap, 6, 1, '#a0a5aa');
-    // Door (left wall): swings open, light spills out
-    const d = this.door;
-    const glow = 0.35 + 0.25 * Math.sin(T * 4);
-    r(d.x - 1, d.y - 1, d.w + 2, d.h + 2, `rgba(255,220,120,${shut ? 0.1 : glow})`);
-    r(d.x + 1 + wob, d.y, 3, d.h, shut ? '#5a3e22' : '#1a120a');
-    if (!shut) {
-      const swing = Math.round(1.5 + Math.sin(T * (this.mode === 'wind' ? 7 : 2)) * 1.5);
-      r(d.x - swing + wob, d.y, 2, d.h, '#6e5034');                             // door leaf
-      r(d.x + 2 + wob, d.y + 3, 1, d.h - 4, '#ffcf6a');                         // lamplight
+    wr(x + 6, y + 4, 4, 2, '#c84c0c'); wr(x + 26, y + 5, 3, 2, '#c84c0c');          // rust
+    const flap = Math.round(Math.sin(T0 * 12) * (this.mode === 'wind' ? 2 : 0.5));
+    wr(x + w - 5, y + 2 + flap, 8, 2, K); wr(x + w - 5, y + 2 + flap, 8, 1, W);     // loose sheet
+    const dx = x + 3, dy = y + 14;                                                 // door
+    wr(dx - 1, dy - 1, 12, h - 13, K);
+    if (this.doorShut) {
+      wr(dx, dy, 10, h - 14, '#884000');
+      wr(dx + 2, dy + 2, 1, h - 18, '#503000'); wr(dx + 6, dy + 2, 1, h - 18, '#503000');
+    } else {
+      wr(dx, dy, 10, h - 14, Math.floor(T0 * 4) % 2 ? '#f8d878' : '#fce0a8');
+      wr(dx + 3, dy + 3, 4, 4, '#f8b800');
+      const swing = Math.round(2 + Math.sin(T0 * (this.mode === 'wind' ? 8 : 2)) * 2);
+      wr(dx - swing - 1, dy, 3, h - 14, K); wr(dx - swing, dy + 1, 2, h - 16, '#a85808');
     }
-    r(d.x + 1 + wob, d.y + d.h, 3, 1, '#4a3420');
   }
 
-  _drawPerson(r, m, i, T) {
-    if (m.inside) return;
-    const x = Math.round(m.x), y = Math.round(m.y);
-    if (this.phase === 'collapse') {                                            // lying down
-      r(x - 3, y - 2, 7, 2, m.shirt); r(x + 4 * (m.face || 1), y - 2, 2, 2, m.skin);
-      return;
+  _drawSprite(wr, tmpl, x, y, face, m, hurtFlash) {
+    const cols = { o: K, s: m.skin, h: m.hair, c: hurtFlash ? W : m.shirt, p: '#24188c', E: K };
+    for (let row = 0; row < tmpl.length; row++) {
+      const line = tmpl[row];
+      for (let i = 0; i < 8; i++) {
+        const ch = line[face > 0 ? i : 7 - i];
+        if (ch && ch !== '.' && cols[ch]) wr(x + i, y + row, 1, 1, cols[ch]);
+      }
     }
-    const h = m.small ? 6 : 8;
-    const step = Math.floor(this.walk + i * 1.7) % 2;
-    const moving = this.phase === 'enter' || (this.speedFrac || 0) > 0.1;
-    const hurt = m.hurt > 0 && Math.sin(T * 40) > 0;
-    r(x - 2, y, 5, 1, 'rgba(0,0,0,0.28)');                                      // shadow
-    // legs
-    const legA = moving && step ? 1 : 0;
-    r(x - 1, y - 2 + legA, 1, 2 - legA, '#2a2a3a'); r(x + 1, y - 2 + (1 - legA) * (moving ? 1 : 0), 1, 2 - (moving ? 1 - legA : 0), '#2a2a3a');
-    // body
-    r(x - 1, y - h + 3, 3, h - 5, hurt ? '#ffffff' : m.shirt);
-    r(x - 2 + (m.face > 0 ? 0 : 4), y - h + 4, 1, 2, m.skin);                   // arm
-    // head + hair
-    r(x - 1, y - h, 3, 3, m.skin);
-    r(x - 1, y - h, 3, 1, '#3a2614');
-    r(x + (m.face > 0 ? 1 : -1), y - h + 1, 1, 1, '#1a1a1a');                    // eye
-    if (i === 0) {                                                               // leader marker
-      const bob = Math.round(Math.sin(T * 6));
-      r(x, y - h - 4 + bob, 1, 2, '#ffd700'); r(x - 1, y - h - 3 + bob, 3, 1, '#ffd700');
-    }
-    if (this.mode === 'heat' && this.stamina < 25 && Math.sin(T * 6 + i) > 0) r(x + 2, y - h - 1, 1, 1, '#9fd8ff');
   }
 
-  _drawDebris(c) {
+  _drawFamily(wr, T0) {
+    for (let i = this.family.length - 1; i >= 0; i--) {         // followers behind, leader in front
+      const m = this.family[i];
+      let st;
+      if (i === 0) {
+        const L = this.leader;
+        st = { x: L.x, y: L.y + L.h, face: L.face, pose: this._pose(L) };
+        if (L.invuln > 0 && this.phase === 'play' && Math.floor(T0 * 20) % 2) continue;
+      } else {
+        st = this._followerState(i);
+        if (!st) continue;
+      }
+      if (this.phase === 'enter' && st.x > this.doorX + 2) continue;    // already inside
+      const pose = this.phase === 'collapse' ? 'down' : st.pose;
+      if (this.phase === 'collapse' && i > 0) st = { ...st, y: this._groundTopAt(st.x + 3) };
+      let tmpl = SPR[pose] || SPR.stand;
+      if (m.small && pose !== 'down' && pose !== 'crouch') tmpl = tmpl.slice(0, 4).concat(tmpl.slice(6));
+      this._drawSprite(wr, tmpl, Math.round(st.x) - 1, Math.round(st.y) - tmpl.length, st.face, m, m.hurt > 0 && Math.floor(T0 * 30) % 2);
+      if (i === 0 && this.phase === 'play') {                          // leader marker
+        const bob = Math.floor(T0 * 4) % 2;
+        wr(Math.round(st.x) + 2, Math.round(st.y) - tmpl.length - 4 + bob, 2, 2, '#f8b800');
+      }
+    }
+    if (this.mode === 'heat' && this.stamina < 25 && Math.floor(T0 * 3) % 2) wr(this.leader.x + 7, this.leader.y - 3, 1, 2, '#3cbcfc');
+  }
+
+  _drawDebris(wr) {
     for (const d of this.debris) {
-      c.save();
-      c.translate(Math.round(d.x) * S, Math.round(d.y) * S);
-      c.rotate(Math.round(d.rot * 4) / 4);
-      c.fillStyle = d.kind === 'plank' ? '#8a6a3a' : '#9aa0a6';
-      const w = d.kind === 'plank' ? 7 : 5, h = d.kind === 'plank' ? 2 : 3;
-      c.fillRect(-w * S / 2, -h * S / 2, w * S, h * S);
-      c.fillStyle = d.kind === 'plank' ? '#6a4a24' : '#6e7378';
-      c.fillRect(-w * S / 2, h * S / 2 - S, w * S, S);
-      c.restore();
+      const spin = Math.floor(d.rot) % 2;
+      const col = d.kind === 'plank' ? ['#c86c1c', '#7c3c00'] : ['#bcbcbc', '#7c7c7c'];
+      if (!spin) { wr(d.x - 4, d.y - 2, 9, 4, K); wr(d.x - 3, d.y - 1, 7, 2, col[0]); wr(d.x - 3, d.y, 7, 1, col[1]); }
+      else { wr(d.x - 2, d.y - 4, 4, 8, K); wr(d.x - 1, d.y - 3, 2, 6, col[0]); wr(d.x, d.y - 3, 1, 6, col[1]); }
     }
   }
 
-  _drawParticles(r) {
+  _drawEmbers(wr) {
+    for (const e of this.embers) {
+      wr(e.x - 2, e.y - 2, 4, 4, K); wr(e.x - 1, e.y - 1, 2, 2, '#f8b800');
+      wr(e.x + 1, e.y - 4, 1, 2, 'rgba(120,120,120,0.6)');
+    }
+  }
+
+  _drawFireWall(wr, T0) {
+    const f = this.fireWall;
+    for (let y = HUD_H; y < LH; y += 4) {
+      const lick = Math.round(Math.sin(y * 0.5 + T0 * 10) * 3 + Math.sin(y * 0.17 + T0 * 4) * 2);
+      wr(f - 60, y, 60 + lick + 2, 4, K);
+      wr(f - 60, y, 60 + lick, 4, '#d82800');
+      wr(f - 60, y, 56 + lick, 4, '#f87800');
+      wr(f - 60, y, 50 + lick, 4, '#fce0a8');
+    }
+  }
+
+  _drawParticles(wr) {
     for (const p of this.particles) {
       const k = 1 - p.t / p.life;
       switch (p.kind) {
-        case 'ember': r(p.x, p.y, 1, 1, k > 0.5 ? '#ffd060' : '#ff6a1a'); break;
-        case 'spark': r(p.x, p.y, 1, 1, p.color || '#ffffff'); break;
-        case 'sweat': r(p.x, p.y, 1, 1, '#9fd8ff'); break;
-        case 'smoke': {
-          const rr = p.r * (1 + p.t * 0.5);
-          r(p.x - rr, p.y - rr * 0.6, rr * 2, rr * 1.2, `rgba(60,55,55,${0.35 * k})`);
-          break;
-        }
-        case 'streak': {
-          const g = this.gust;
-          const len = p.len * (g.state === 'gust' ? 1.6 : 1);
-          for (let s = 0; s < len; s += 2) r(p.x - Math.cos(g.angle) * s, p.y - Math.sin(g.angle) * s, 1, 1, `rgba(220,230,235,${0.35 * k})`);
-          break;
-        }
-        case 'rain': r(p.x, p.y, 1, 2, 'rgba(170,200,230,0.55)'); break;
+        case 'ember': wr(p.x, p.y, 1, 1, k > 0.5 ? '#f8b800' : '#f83800'); break;
+        case 'spark': wr(p.x, p.y, 1, 1, p.color || W); break;
+        case 'sweat': wr(p.x, p.y, 1, 1, '#3cbcfc'); break;
+        case 'puff': wr(p.x - 1, p.y - 1, 2, 2, W); break;
+        case 'smoke': { const rr = p.r * (1 + p.t); wr(p.x - rr, p.y - rr, rr * 2, rr * 2, `rgba(60,60,60,${0.55 * k})`); break; }
+        case 'streak': wr(p.x, p.y, p.len * (this.gust.state === 'gust' ? 2 : 1), 1, `rgba(252,252,252,${0.45 * k})`); break;
+        case 'rain': wr(p.x, p.y, 1, 3, 'rgba(160,200,252,0.7)'); break;
       }
     }
   }
 
-  _drawWeatherOverlay(c, r, T) {
-    c.fillStyle = this.pal.tint;
-    c.fillRect(0, 0, LW * S, LH * S);
-    if (this.mode === 'heat') {
-      // Sun glare in the corner
-      const g = c.createRadialGradient(LW * S, 0, 4, LW * S, 0, 120);
-      g.addColorStop(0, 'rgba(255,250,220,0.55)'); g.addColorStop(1, 'rgba(255,240,200,0)');
-      c.fillStyle = g; c.fillRect(0, 0, LW * S, LH * S);
+  _drawOverlay(c, r, T0) {
+    if (this.mode === 'fire') {
+      c.fillStyle = 'rgba(80,0,0,0.12)'; c.fillRect(0, 0, LW * S, LH * S);
+      for (let i = 0; i < 4; i++) {                       // drifting smoke banks
+        const x = ((i * 50 - T0 * 12) % 220 + 220) % 220 - 40;
+        r(x, 30 + i * 9, 40, 8, 'rgba(30,20,20,0.25)');
+      }
     }
     if (this.mode === 'wind') {
-      // Cloud shadows racing across
-      for (let i = 0; i < 3; i++) {
-        const cx = ((T * 25 * Math.cos(this.gust.angle) + i * 60) % (LW + 40) + LW + 40) % (LW + 40) - 20;
-        r(cx, FIELD_TOP + 10 + i * 22, 30, 12, 'rgba(10,20,30,0.18)');
-      }
-      if (this.gust.state === 'gust') { c.fillStyle = 'rgba(200,210,220,0.06)'; c.fillRect(0, 0, LW * S, LH * S); }
+      c.fillStyle = 'rgba(10,20,40,0.15)'; c.fillRect(0, 0, LW * S, LH * S);
+      if (this.stormy && Math.floor(T0 * 3) % 23 === 0) { c.fillStyle = 'rgba(252,252,252,0.35)'; c.fillRect(0, 0, LW * S, LH * S); }
     }
-    if (this.mode === 'fire') {
-      const f = Math.max(0, this.fireFront);
-      const g = c.createLinearGradient(0, 0, (f + 40) * S, 0);
-      g.addColorStop(0, 'rgba(255,90,20,0.30)'); g.addColorStop(1, 'rgba(255,90,20,0)');
-      c.fillStyle = g; c.fillRect(0, 0, LW * S, LH * S);
-    }
+    if (this.mode === 'heat') { c.fillStyle = 'rgba(252,224,168,0.10)'; c.fillRect(0, 0, LW * S, LH * S); }
   }
 
-  // ── HUD & overlays (drawn at native resolution for crisp text) ─────────────
-
-  _text(ctx, str, x, y, color = '#fff', size = 8, align = 'left') {
-    ctx.font = `bold ${size}px monospace`;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillText(str, x + 1, y + 1);
-    ctx.fillStyle = color;
-    ctx.fillText(str, x, y);
+  _drawHUD(r, T0) {
+    const P = this.pal;
+    r(0, 0, LW, HUD_H, K);
+    r(0, HUD_H, LW, 1, P.hud);
+    this._text(r, this.label, 3, 3, P.hud, 1, 'left', false);
+    this._text(r, 'FAM', 58, 3, W, 1, 'left', false);                 // family health: ten blocks
+    const col = this.health > 50 ? '#00a800' : this.health > 25 ? '#f8b800' : '#d82800';
+    for (let i = 0; i < 10; i++) r(71 + i * 4, 3, 3, 5, this.health > i * 10 ? col : '#3c3c3c');
+    if (this.mode === 'heat') {                                       // stamina
+      const low = this.stamina < 12 && Math.floor(T0 * 8) % 2;
+      r(113, 4, 20, 3, '#3c3c3c'); r(113, 4, Math.round(20 * this.stamina / 100), 3, low ? '#d82800' : '#3cbcfc');
+    }
+    const prog = clamp((this.leader.x - this.spawn.x) / (this.doorX - this.spawn.x), 0, 1);  // progress to shed
+    r(137, 5, 16, 1, '#7c7c7c');
+    r(137 + Math.round(prog * 14), 3, 2, 5, W);
+    r(155, 3, 4, 6, '#a85808'); r(154, 2, 6, 2, '#bcbcbc');
+    if (this.mode === 'wind' && this.gust.state !== 'calm' && (this.gust.state === 'gust' || Math.floor(T0 * 10) % 2)) {
+      const arrows = this.gust.dir < 0 ? '<<<' : '>>>';
+      this._text(r, `${this.gust.state === 'warn' ? 'GUST!' : 'BRACE!'} ${arrows}`, LW / 2, 14, W, 1, 'center');
+    }
+    if (this.mode === 'heat' && this.stamina < 12 && this.phase === 'play') this._text(r, 'EXHAUSTED! FIND SHADE', LW / 2, 14, '#f87858', 1, 'center');
+    if (this._banner && this._banner.t > 0) this._text(r, this._banner.text, LW / 2, 22, this._banner.color, 1, 'center');
   }
 
-  _bar(ctx, x, y, w, h, frac, col, label) {
-    ctx.fillStyle = '#0d0d16'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = col; ctx.fillRect(x + 1, y + 1, Math.max(0, (w - 2) * clamp(frac, 0, 1)), h - 2);
-    for (let i = 1; i < 10; i++) { ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + (w * i) / 10, y + 1, 1, h - 2); }
-    this._text(ctx, label, x - 3, y + h / 2, '#c8c8d8', 7, 'right');
+  _drawButtons(r) {
+    const held = new Set(this.touches.values());
+    const btn = (x, label, on) => {
+      r(x, LH - 22, 20, 20, on ? 'rgba(252,252,252,0.35)' : 'rgba(0,0,0,0.35)');
+      r(x, LH - 22, 20, 1, 'rgba(252,252,252,0.6)');
+      this._text(r, label, x + 10, LH - 15, W, 1, 'center');
+    };
+    btn(2, '<', held.has('l')); btn(26, '>', held.has('r'));
+    btn(LW - 46, 'DN', held.has('d')); btn(LW - 22, 'UP', held.has('j'));
   }
 
-  _drawHUD(ctx, T) {
-    const W = LW * S;
-    ctx.fillStyle = '#12121e'; ctx.fillRect(0, 0, W, HUD_H * S);
-    ctx.fillStyle = '#e94560'; ctx.fillRect(0, HUD_H * S - 1, W, 1);
-    const pc = { heat: '#ffb347', wind: '#9ad0ff', fire: '#ff6a2a' }[this.mode];
-    this._text(ctx, this.label, 6, 11, pc, 9);
-
-    const hp = this.health / 100;
-    const hcol = hp > 0.5 ? '#2ecc71' : hp > 0.25 ? '#f39c12' : '#e74c3c';
-    this._bar(ctx, 118, 4, 70, 7, hp, hcol, 'FAMILY');
-    if (this.mode === 'heat') {
-      const sc = this.stamina < 15 ? (Math.sin(T * 10) > 0 ? '#e74c3c' : '#7a2a2a') : '#5ac8fa';
-      this._bar(ctx, 118, 13, 70, 5, this.stamina / 100, sc, 'STAMINA');
-    }
-    // Distance to shed
-    const L = this.family[0];
-    const prog = clamp((L.x - this.startPos.x) / (this.door.x - this.startPos.x), 0, 1);
-    this._text(ctx, 'SHED', 214, 11, '#c8c8d8', 7);
-    ctx.fillStyle = '#0d0d16'; ctx.fillRect(238, 8, 60, 6);
-    ctx.fillStyle = '#ffd700'; ctx.fillRect(239, 9, Math.round(58 * prog), 4);
-    ctx.fillStyle = '#8a6a44'; ctx.fillRect(299, 6, 8, 10); ctx.fillStyle = '#70757a'; ctx.fillRect(298, 5, 10, 2);
-
-    // Gust warning arrow
-    if (this.mode === 'wind' && (this.gust.state === 'warn' || this.gust.state === 'gust')) {
-      const a = this.gust.angle, cx = W / 2, cy = HUD_H * S + 16;
-      if (this.gust.state === 'gust' || Math.sin(T * 20) > 0) {
-        this._text(ctx, this.gust.state === 'warn' ? 'GUST INCOMING!' : 'GUST!', cx, cy, '#ffffff', 9, 'center');
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(cx + 52 - Math.cos(a) * 8, cy - Math.sin(a) * 8);
-        ctx.lineTo(cx + 52 + Math.cos(a) * 8, cy + Math.sin(a) * 8);
-        ctx.stroke();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(cx + 52 + Math.cos(a) * 8 - 2, cy + Math.sin(a) * 8 - 2, 4, 4);
-      }
-    }
-    if (this.mode === 'heat' && this.stamina < 15 && this.phase === 'play') {
-      this._text(ctx, 'EXHAUSTED — find shade!', W / 2, HUD_H * S + 14, '#ff8a6a', 8, 'center');
+  _drawIntro(r, T0) {
+    r(0, HUD_H + 1, LW, LH - HUD_H - 1, K);
+    this._text(r, 'RUN FOR THE SHED!', LW / 2, 16, '#f8b800', 2, 'center');
+    this._text(r, this.label, LW / 2, 31, this.pal.hud, 1, 'center');
+    this._text(r, this.cfg.hint, LW / 2, 39, W, 1, 'center');
+    const perkNames = {
+      firstAid: 'FIRST AID', burnMult: 'GAS MASKS', staminaMult: 'INSULATION',
+      drinks: `${this.perks.drinks} WATER`, pushMult: 'TARP BRACE', earlyWarning: 'RADIO',
+    };
+    const perks = Object.keys(this.perks).map(k => perkNames[k]).filter(Boolean);
+    const lines = perks.length ? wrap('SUPPLIES: ' + perks.join(', '), 38) : ['NO SUPPLIES FOR THIS ONE'];
+    lines.slice(0, 2).forEach((ln, i) => this._text(r, ln, LW / 2, 48 + i * 7, perks.length ? '#58d854' : '#7c7c7c', 1, 'center'));
+    this._text(r, 'ARROWS MOVE, SPACE JUMP, DOWN CROUCH', LW / 2, 64, '#bcbcbc', 1, 'center');
+    const n = Math.ceil(INTRO_SECONDS - this.phaseT - 0.5);
+    this._text(r, n > 0 ? String(n) : 'GO!', LW / 2, 73, n > 0 ? W : '#58d854', 2, 'center');
+    for (let i = 0; i < this.family.length; i++) {                      // family preview, jogging in place
+      this._drawSprite(r, SPR[Math.floor(T0 * 4 + i) % 2 ? 'walkA' : 'walkB'], 6 + i * 9, LH - 14, 1, this.family[i], false);
     }
   }
 
-  _drawIntro(ctx) {
-    const W = LW * S, H = LH * S;
-    ctx.fillStyle = 'rgba(8,8,16,0.72)'; ctx.fillRect(0, HUD_H * S, W, H - HUD_H * S);
-    this._text(ctx, 'RUN FOR THE SHED!', W / 2, 62, '#ffd700', 14, 'center');
-    this._text(ctx, this.label, W / 2, 82, { heat: '#ffb347', wind: '#9ad0ff', fire: '#ff6a2a' }[this.mode], 10, 'center');
-    this._text(ctx, this.cfg.hint, W / 2, 100, '#e0e0e0', 7, 'center');
-    this._text(ctx, 'Arrows / WASD — or tap & hold where to go', W / 2, 114, '#8892a4', 7, 'center');
-    const left = INTRO_SECONDS - this.phaseT;
-    const n = Math.ceil(left - 0.6);
-    this._text(ctx, n > 0 ? String(n) : 'GO!', W / 2, 140, n > 0 ? '#ffffff' : '#2ecc71', 16, 'center');
-  }
-
-  _drawEndBanner(ctx) {
-    const W = LW * S;
+  _drawEnd(r) {
     const k = Math.min(1, this.phaseT / 0.4);
     const ok = this.outcome !== 'failed';
-    ctx.fillStyle = ok ? `rgba(10,30,15,${0.6 * k})` : `rgba(40,5,5,${0.65 * k})`;
-    ctx.fillRect(0, 66, W, 44);
+    // Banner sits up top so the shed (door slam, rattling walls) stays in view
+    r(0, HUD_H + 1, LW, 22, ok ? `rgba(0,40,0,${0.75 * k})` : `rgba(60,0,0,${0.75 * k})`);
+    r(0, HUD_H + 22, LW, 1, K);
     const title = { survived: 'SHELTERED!', barely: 'MADE IT... BARELY', failed: 'OVERWHELMED' }[this.outcome];
-    this._text(ctx, title, W / 2, 82, ok ? '#2ecc71' : '#e74c3c', 14, 'center');
-    const sub = ok ? 'The shed creaks and groans — but it holds.' : 'The family collapses short of cover.';
-    this._text(ctx, sub, W / 2, 99, '#e0e0e0', 7, 'center');
+    this._text(r, title, LW / 2, HUD_H + 3, ok ? '#58d854' : '#f87858', 2, 'center');
+    this._text(r, ok ? 'THE SHED CREAKS - BUT IT HOLDS.' : 'THE FAMILY COLLAPSES SHORT OF COVER.', LW / 2, HUD_H + 15, W, 1, 'center');
   }
 }

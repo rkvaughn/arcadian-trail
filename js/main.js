@@ -6,6 +6,9 @@ import { EventPanel } from '../ui/eventPanel.js';
 import { Logger } from '../ui/logger.js';
 import { MapOverlay } from '../ui/mapOverlay.js';
 import { ShedDash, shedModeFor } from '../ui/shedDash.js';
+import { challengeOdds, minigamePerks, consumeMinigameUses } from './supplies.js';
+
+const MINIGAME_KIND = { SHELTER: 'shed', FROGGER: 'frogger', BARRICADE: 'barricade' };
 import { BarricadeRunner } from '../ui/barricadeRunner.js';
 import { FroggerDash } from '../ui/froggerDash.js';
 import { fetchWeather, getWeatherRisk, getWeatherNarrative } from './weather.js';
@@ -142,7 +145,13 @@ class GameController {
         case 'event':
           clearInterval(this.travelInterval);
           this.travelInterval = null;
-          this.eventPanel.show(result.event, { waypoint: this.game.getCurrentWaypoint() });
+          this.eventPanel.show(result.event, {
+            waypoint: this.game.getCurrentWaypoint(),
+            odds: result.event.choices.map(c => c.minigame
+              ? { minigame: true, labels: minigamePerks(this.game, MINIGAME_KIND[c.minigame],
+                  shedModeFor(result.event.perilType, result.event.id) || undefined).labels }
+              : challengeOdds(this.game, result.event, c)),
+          });
           this.logger.log(`EVENT: ${result.event.name}`, 'event');
           break;
 
@@ -250,6 +259,8 @@ class GameController {
 
     const progress = this.game.getProgress();
     const callback = (mgResult) => this._onMiniGameComplete(mgResult);
+    const { perks, labels } = minigamePerks(this.game, MINIGAME_KIND[type] || 'shed', shed.peril);
+    if (labels.length) this.logger.log(`Supplies ready: ${labels.join(' · ')}`, 'info');
 
     const canvasEl = document.getElementById('asciiDisplay');
     const miniGameEl = document.getElementById('miniGameDisplay');
@@ -259,23 +270,25 @@ class GameController {
       canvasEl.style.display = '';
       miniGameEl.style.display = 'none';
       this.logger.log('FORD THE RIVER! Ride the logs — don\'t fall in!', 'event');
-      this.froggerDash.start(progress, callback, this.currentWeather);
+      this.froggerDash.start(progress, callback, this.currentWeather, perks);
     } else if (type === 'BARRICADE') {
       // ASCII mini-games use the pre element
       canvasEl.style.display = 'none';
       miniGameEl.style.display = '';
       this.logger.log('CRASH THE BARRICADE! Dodge obstacles and break free!', 'event');
-      this.barricadeRunner.start(progress, callback);
+      this.barricadeRunner.start(progress, callback, perks);
     } else {
       // Shed Dash draws pixel art on the shared canvas, like Frogger
       canvasEl.style.display = '';
       miniGameEl.style.display = 'none';
       this.logger.log('RUN FOR THE SHED! Get the family to cover!', 'event');
-      this.shedDash.start(progress, callback, { ...shed, family: this.game.family });
+      this.shedDash.start(progress, callback, { ...shed, family: this.game.family, perks });
     }
   }
 
   _onMiniGameComplete(result) {
+    // Spend supplies the mini-game actually used
+    consumeMinigameUses(this.game, result.used);
     // Restore canvas display (in case an ASCII mini-game was showing the pre element)
     const canvasEl = document.getElementById('asciiDisplay');
     const miniGameEl = document.getElementById('miniGameDisplay');

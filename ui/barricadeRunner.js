@@ -61,8 +61,10 @@ export class BarricadeRunner {
     this._rafId = null;
   }
 
-  start(difficulty, onComplete) {
+  start(difficulty, onComplete, perks = {}) {
     this.onComplete = onComplete;
+    this.perks = perks || {};   // supply perks (js/supplies.js minigamePerks)
+    this.used = {};             // supplies consumed this run
     this.params = getDifficultyParams(difficulty);
     this.running = true;
 
@@ -73,6 +75,10 @@ export class BarricadeRunner {
 
     // Speed & distance
     this.speed = this.params.baseSpeed;
+    if (this.perks.boost) {      // fuel can: burst of speed off the line
+      this.speed *= this.perks.boost;
+      this.used.extra_fuel = 1;
+    }
     this.distanceTraveled = 0;
 
     // Game state
@@ -209,7 +215,7 @@ export class BarricadeRunner {
       const o = this.obstacles[i];
       if (Math.round(o.row) === pRow && Math.abs(Math.round(o.col) - pCol) <= 1) {
         this.obstacles.splice(i, 1);
-        this.speed = Math.max(0, this.speed - this.params.speedDrain);
+        this.speed = Math.max(0, this.speed - this.params.speedDrain * (this.perks.hitMult || 1));
         this.hitFlashFrames = 4;
       }
     }
@@ -266,6 +272,7 @@ export class BarricadeRunner {
       }
       return {
         survived: true,
+        used: this.used,
         narrative: 'Metal screeches as you smash through the barricade. The family cheers — you\'re free!',
         effects,
       };
@@ -277,6 +284,7 @@ export class BarricadeRunner {
       effects.food = -10;
       return {
         survived: false,
+        used: this.used,
         narrative: 'The wreckage stalls the vehicle. Armed figures surround you, taking what they want.',
         effects,
       };

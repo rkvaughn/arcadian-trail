@@ -78,8 +78,10 @@ export class FroggerDash {
     this._endScheduled = false;
   }
 
-  start(difficulty, onComplete, weatherData) {
+  start(difficulty, onComplete, weatherData, perks = {}) {
     this.onComplete  = onComplete;
+    this.perks       = perks || {};   // supply perks (js/supplies.js minigamePerks)
+    this.used        = {};            // supplies consumed this run
     this.difficulty  = Math.max(0, Math.min(1, difficulty || 0));
     this.weatherData = weatherData || null;
     this.running     = true;
@@ -256,7 +258,12 @@ export class FroggerDash {
       player.inWater = !ridden;
 
       if (player.inWater) {
-        player.health = Math.max(0, player.health - WATER_DAMAGE_RATE * dt);
+        player.health = Math.max(0, player.health - WATER_DAMAGE_RATE * (this.perks.waterMult || 1) * dt);
+        // First aid kit: one emergency heal per crossing
+        if (this.perks.firstAid && !this.used.first_aid && player.health > 0 && player.health < 30) {
+          player.health = Math.min(100, player.health + 30);
+          this.used.first_aid = 1;
+        }
         if (player.health <= 0) { this.state = 'failed'; }
       }
     } else {
@@ -395,6 +402,7 @@ export class FroggerDash {
       return {
         survived: true,
         won: true,
+        used: this.used,
         narrative: cleanCross
           ? 'Log by log, you pick your way across the churning current without a scratch. The far bank rises solid under your wheels.'
           : 'You make it — barely. Water floods the floorboards twice, but sheer momentum gets you across the debris-choked river.',
@@ -409,6 +417,7 @@ export class FroggerDash {
       return {
         survived: false,
         won: false,
+        used: this.used,
         narrative: sweptAway
           ? 'The current takes you downstream. You claw back to the near bank, soaked and shaking, vehicle scraped along gravel.'
           : 'Time runs out in mid-crossing. The water rises. You retreat to the near bank before you lose the vehicle entirely.',

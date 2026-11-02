@@ -37,7 +37,8 @@ Read these files, in this order, to be oriented. Skip everything else unless the
 - `REFERENCES.md` — full citations for all 8 scientific sources calibrating the SSP system
 
 **Only if task involves mini-games:**
-- `ui/shedDash.js` — "Run for the Shed" pixel-art mini-game on the shared canvas (160×90 logical px at 2×). Family runs to a rickety shed; peril from the triggering event changes the rules: heat (sluggish, stamina, shade), wind (gusts, lee cover, debris; hurricane/flood add pools), fire (spot fires, firebreak lines, advancing front). `shedModeFor(perilType, eventId)` maps events to modes
+- `ui/shedDash.js` — "Run for the Shed": original 8-bit side-scrolling platformer on the shared canvas (160×90 logical px at 2×, 8×8 tiles, 3×5 pixel font). Run right to a rickety shed, jumping pits/crates/cars/fences. Peril from the triggering event: heat (sluggish + stamina/shade + cacti), wind (telegraphed gusts, crouch/lee bracing, low/high debris; hurricane/flood add rain + flooded pits), fire (vent flame bursts, chasing fire wall, falling embers). Supply perks from `js/supplies.js`. `shedModeFor(perilType, eventId)` maps events to modes
+- `js/supplies.js` — supplies & odds: `PERIL_ITEMS` (which items help which peril), `challengeOdds()` (visible success chance per event choice), `consumeHelpers()`, `minigamePerks()` / `consumeMinigameUses()` for mini-games. Gameplay tuning, not climate data
 - `ui/barricadeRunner.js` — speed-based escape runner mini-game (535 ln)
 - `ui/froggerDash.js` — canvas-based Frogger river crossing mini-game
 

@@ -4,8 +4,9 @@ export const itemDefs = [
     name: 'Extra Fuel Can',
     cost: 15,
     weight: 3,
-    description: '+20 fuel when used',
-    effect: { fuel: 20 }
+    description: 'One-shot: +20 fuel when used.',
+    effect: { fuel: 20 },
+    maxUses: 1
   },
   {
     id: 'water_purifier',
@@ -21,7 +22,7 @@ export const itemDefs = [
     name: 'First Aid Kit',
     cost: 18,
     weight: 2,
-    description: '+15 health when used. Bonus in medical events.',
+    description: '2 uses: +15 health each. Big bonus in medical events.',
     effect: { health: 15 },
     maxUses: 2
   },
@@ -48,8 +49,9 @@ export const itemDefs = [
     name: 'Canned Food Supply',
     cost: 12,
     weight: 4,
-    description: '+20 food when used.',
-    effect: { food: 20 }
+    description: 'One-shot: +20 food when used (or bartered).',
+    effect: { food: 20 },
+    maxUses: 1
   },
   {
     id: 'tool_kit',
@@ -86,6 +88,16 @@ export const itemDefs = [
     description: 'Passive: +5% chance of positive events (better intel).',
     passive: { positiveBoost: 0.05 },
     effect: null
+  },
+  {
+    // Stackable: priced per bottle so any leftover budget can be spent.
+    id: 'water_bottles',
+    name: 'Water Bottles',
+    cost: 1,
+    stackable: true,
+    weight: 0,
+    description: '1 credit each — buy as many as you like. Up to 2 used per challenge (+2 water each); drink to recover stamina in the heat.',
+    effect: { water: 2 }
   }
 ];
 

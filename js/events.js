@@ -7,6 +7,8 @@
  * applyChoice() resolves a player decision, checking item synergies,
  * routing mini-game triggers, and applying resource deltas.
  */
+import { isChallenge, challengeOdds, consumeHelpers, FAIL_LINES,
+         FAIL_LOSS_MULT, FAIL_GAIN_MULT, FAIL_MIN_MORALE } from './supplies.js';
 import { eventDefs } from '../data/eventDefs.js';
 
 /**
@@ -114,10 +116,43 @@ export function applyChoice(gameState, event, choiceIndex) {
 
   const outcome = choice.outcomes;
   const effects = { ...outcome.effects };
-
-  // Check for item bonus — respects maxUses for consumable items (G5)
   let usedItem = false;
-  if (outcome.itemRequired) {
+  let roll = null;
+
+  if (isChallenge(event, choice)) {
+    // Hazard choices roll against a success chance that supplies raise
+    const odds = challengeOdds(gameState, event, choice);
+    const success = Math.random() < odds.chance;
+    usedItem = odds.helpers.some(h => h.id === outcome.itemRequired);
+    // On success the event's written itemBonus already covers the signature item
+    const gained = consumeHelpers(gameState, odds.helpers,
+      success && usedItem && outcome.itemBonus ? outcome.itemRequired : null);
+    if (success) {
+      if (usedItem && outcome.itemBonus) {
+        for (const [resource, value] of Object.entries(outcome.itemBonus)) {
+          effects[resource] = (effects[resource] || 0) + value;
+        }
+      }
+    } else {
+      usedItem = false;
+      for (const [resource, value] of Object.entries(effects)) {
+        effects[resource] = Math.round(value * (value < 0 ? FAIL_LOSS_MULT : FAIL_GAIN_MULT));
+      }
+      effects.morale = Math.min(effects.morale || 0, FAIL_MIN_MORALE);
+    }
+    for (const [resource, value] of Object.entries(gained)) {
+      // Supplies still get used on a failed roll, but only do half the good
+      const v = success ? value : Math.round(value * FAIL_GAIN_MULT);
+      effects[resource] = (effects[resource] || 0) + v;
+    }
+    roll = {
+      success,
+      chance: odds.chance,
+      used: odds.helpers.map(h => ({ name: h.name, count: h.count, consumed: h.consumes })),
+      failLine: success ? null : (FAIL_LINES[event.perilType] || ''),
+    };
+  } else if (outcome.itemRequired) {
+    // Non-challenge choices (good-news events) keep the simple item bonus (G5)
     const item = gameState.inventory.find(i => i.id === outcome.itemRequired);
     if (item && outcome.itemBonus) {
       const uses = gameState.itemUses?.[item.id] || 0;
@@ -152,9 +187,11 @@ export function applyChoice(gameState, event, choiceIndex) {
     }
   }
 
-  const narrative = (usedItem && outcome.itemNarrative)
+  let narrative = (usedItem && outcome.itemNarrative)
     ? outcome.itemNarrative
     : outcome.narrative;
+  // A failed roll gets its own text: the written outcome describes the plan working
+  if (roll && !roll.success) narrative = `It doesn't go to plan. ${roll.failLine}`.trim();
 
   // Severe health damage from events can kill a party member
   const death = checkEventDeath(gameState, effects, event.perilType);
@@ -169,7 +206,8 @@ export function applyChoice(gameState, event, choiceIndex) {
     death,
     effects,
     setsActiveHazard: choice.setsActiveHazard || null,
-    setsFlag: choice.setsFlag || null
+    setsFlag: choice.setsFlag || null,
+    roll
   };
 }
 

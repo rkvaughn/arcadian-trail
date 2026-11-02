@@ -2,6 +2,13 @@ import { origins, destinations } from '../data/cities.js';
 import { getAvailableDestinations } from '../data/routes.js';
 import { getTraits } from '../js/characters.js';
 import { itemDefs } from '../data/items.js';
+import { perilsHelpedBy } from '../js/supplies.js';
+
+const BUDGET = 100;
+const PERIL_LABELS = {
+  wildfire: 'Wildfire', hurricane: 'Hurricane', flood: 'Flood', heat: 'Heat', tornado: 'Tornado',
+  infrastructure: 'Infrastructure', health: 'Sickness', mechanical: 'Breakdowns', social: 'People',
+};
 import { SSP_DEFS, YEAR_DEFS } from '../data/ssp.js';
 import { generateResearchSummary } from './researchSummary.js';
 import { ScreenArt, titleScene, endWinScene, endLoseScene } from './cutscenes/screensArt.js';
@@ -197,27 +204,57 @@ export class ScreenManager {
     for (const item of itemDefs) {
       const label = document.createElement('label');
       label.className = 'item-option';
+      const helps = perilsHelpedBy(item.id).map(p => PERIL_LABELS[p] || p).join(' · ');
+      const control = item.stackable
+        ? `<input type="number" class="item-qty" name="item-qty" data-id="${item.id}" min="0" max="${BUDGET}" step="1" value="0" aria-label="${item.name} quantity">`
+        : `<input type="checkbox" name="items" value="${item.id}">`;
       label.innerHTML = `
-        <input type="checkbox" name="items" value="${item.id}">
+        ${control}
         <span class="item-name">${item.name}</span>
-        <span class="item-cost">Cost: ${item.cost}</span>
+        <span class="item-cost">Cost: ${item.cost}${item.stackable ? ' each' : ''}</span>
+        ${item.stackable ? '<button type="button" class="item-fill">Fill budget</button>' : ''}
         <span class="item-desc">${item.description}</span>
+        ${helps ? `<span class="item-helps">Helps with: ${helps}</span>` : ''}
       `;
       container.appendChild(label);
     }
     this.updateBudget();
 
     container.addEventListener('change', () => this.updateBudget());
+    container.addEventListener('input', () => this.updateBudget());
+    // "Fill budget": spend every remaining credit on this stackable item
+    container.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('item-fill')) return;
+      e.preventDefault();
+      const qty = e.target.parentElement.querySelector('.item-qty');
+      const item = itemDefs.find(i => i.id === qty.dataset.id);
+      const current = this._qty(qty);
+      const spare = this._remaining() + current * item.cost;
+      qty.value = Math.max(0, Math.floor(spare / item.cost));
+      this.updateBudget();
+    });
   }
 
-  updateBudget() {
-    const checked = document.querySelectorAll('input[name="items"]:checked');
+  _qty(input) {
+    const n = Math.floor(Number(input.value));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  _remaining() {
     let totalCost = 0;
-    for (const cb of checked) {
+    for (const cb of document.querySelectorAll('input[name="items"]:checked')) {
       const item = itemDefs.find(i => i.id === cb.value);
       if (item) totalCost += item.cost;
     }
-    const remaining = 100 - totalCost;
+    for (const q of document.querySelectorAll('input[name="item-qty"]')) {
+      const item = itemDefs.find(i => i.id === q.dataset.id);
+      if (item) totalCost += item.cost * this._qty(q);
+    }
+    return BUDGET - totalCost;
+  }
+
+  updateBudget() {
+    const remaining = this._remaining();
     const budgetEl = document.getElementById('budget-remaining');
     if (budgetEl) {
       budgetEl.textContent = remaining;
@@ -245,16 +282,18 @@ export class ScreenManager {
     // Gather selected items, check budget
     const checkedItems = document.querySelectorAll('input[name="items"]:checked');
     const selectedItems = [];
-    let totalCost = 0;
     for (const cb of checkedItems) {
       const item = itemDefs.find(i => i.id === cb.value);
-      if (item) {
-        selectedItems.push(item);
-        totalCost += item.cost;
-      }
+      if (item) selectedItems.push(item);
+    }
+    // Stackable supplies go into the inventory as one entry with a quantity
+    for (const q of document.querySelectorAll('input[name="item-qty"]')) {
+      const item = itemDefs.find(i => i.id === q.dataset.id);
+      const n = this._qty(q);
+      if (item && n > 0) selectedItems.push({ ...item, quantity: n });
     }
 
-    if (totalCost > 100) {
+    if (this._remaining() < 0) {
       document.getElementById('setup-error').textContent = 'Over budget! Remove some items.';
       return;
     }

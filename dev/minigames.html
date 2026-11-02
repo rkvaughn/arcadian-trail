@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-game Bench</title>
+  <style>
+    :root { --bg: #0f0f1a; --fg: #e0e0e0; --btn: #1a1a2e; --on: #e94560; }
+    body { background: var(--bg); color: var(--fg); font-family: monospace; margin: 16px; }
+    .ascii-display { display: block; width: 960px; max-width: 100%; aspect-ratio: 16 / 9; height: auto;
+      image-rendering: pixelated; border: 2px solid #333; background: #000; box-sizing: border-box; }
+    pre.ascii-display { margin: 0; }
+    .ascii-display.minigame-touch { touch-action: none; }
+    #info { margin: 8px 0; min-height: 1.2em; color: #f0c060; }
+    .bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+    button, select { background: var(--btn); color: var(--fg); border: 1px solid #333; padding: 4px 8px; font-family: inherit; }
+    #log { white-space: pre-wrap; color: #9ad0a0; }
+  </style>
+</head>
+<body>
+  <p>Dev-only bench for the mini-games. Query: ?game=shed|frogger|barricade&amp;peril=heat|wind|fire&amp;variant=hurricane&amp;progress=0.5&amp;perks=firstAid,drinks=2</p>
+  <canvas id="asciiDisplay" class="ascii-display"></canvas>
+  <pre id="miniGameDisplay" class="ascii-display" style="display:none"></pre>
+  <div id="info"></div>
+  <div class="bar" id="games"></div>
+  <div class="bar"><button id="restart">restart</button><span id="q"></span></div>
+  <div id="log"></div>
+  <script type="module" src="minigames.js"></script>
+</body>
+</html>

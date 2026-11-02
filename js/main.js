@@ -272,9 +272,9 @@ class GameController {
       this.logger.log('FORD THE RIVER! Ride the logs — don\'t fall in!', 'event');
       this.froggerDash.start(progress, callback, this.currentWeather, perks);
     } else if (type === 'BARRICADE') {
-      // ASCII mini-games use the pre element
-      canvasEl.style.display = 'none';
-      miniGameEl.style.display = '';
+      // Barricade draws pixel art on the shared canvas, like Frogger
+      canvasEl.style.display = '';
+      miniGameEl.style.display = 'none';
       this.logger.log('CRASH THE BARRICADE! Dodge obstacles and break free!', 'event');
       this.barricadeRunner.start(progress, callback, perks);
     } else {

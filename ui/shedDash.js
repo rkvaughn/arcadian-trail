@@ -1,9 +1,8 @@
 /**
  * shedDash.js — "Run for the Shed": an 8-bit side-scrolling dash
  *
- * Original NES-era-style platformer (chunky 8×8 tiles, bold limited palette,
- * black-outlined sprites, blocky 3×5 pixel font). The family runs right
- * across a scrolling field to a rickety shed while the peril interferes:
+ * Original NES-era-style platformer. The family runs right across a scrolling
+ * field to a rickety shed while the peril interferes:
  *
  *   HEAT — sluggish, slippery movement and shorter jumps; stamina drains as you
  *          run and only recovers in tree shade; cacti hurt.
@@ -13,9 +12,12 @@
  *   FIRE — ground vents smoke, then burst into flame columns; a wall of fire
  *          chases you; burning embers fall from above.
  *
- * Renders to the shared <canvas id="asciiDisplay"> at 160×90 logical px (2×).
- * All numeric constants are GAMEPLAY TUNING (px, px/s, health points), not
- * climate data. Outcome effects match the original Shelter Dash.
+ * Physics and level logic run in the original 160×90 logical px (8 px tiles),
+ * so the bot-tested tuning below is unchanged. The art is drawn at 2× detail on
+ * the shared <canvas id="asciiDisplay"> at its native 320×180, one canvas pixel
+ * per art pixel, in the cut-scene style (ui/minigames/shedArt.js, kit.js).
+ * All numeric constants are GAMEPLAY TUNING (px, px/s, health points) or
+ * visual, not climate data. Outcome effects match the original Shelter Dash.
  *
  * Public interface (same contract as the other mini-games):
  *   new ShedDash(canvasEl, infoBarEl)
@@ -24,11 +26,25 @@
  *   onComplete({ survived, narrative, effects, used })
  */
 
+import {
+  W as CW, H as CH, R, rng, ditherFill, drawWrap, draw, silhouette, disc, drawPuff, flameWall, bolt, text, ease,
+} from './cutscenes/kit.js';
+import { cloudSprite, birdSprites, SHIRTS, SKINS } from './cutscenes/sprites.js';
+import {
+  INK, plate, meter, bar, touchButton, drawLogo, label, countdown, wrapText, turbine, GOLD, GREEN, RED, BLUE,
+} from './minigames/art.js';
+import {
+  TILE, LOOKS, lookFor, buildBackdrop, buildTiles, FAR_Y, MID_Y, crateSprite, wreckSprite, fenceSprite,
+  treeSprites, cactusHazard, debrisSprites, emberSprite, arrowMarker, heartIcon, dropIcon, shedIcon, shedBody,
+  shedDoors, looseSheet, runnerSprites, veil,
+} from './minigames/shedArt.js';
+
 // ── Screen & world ───────────────────────────────────────────────────────────
-const LW = 160, LH = 90, S = 2;
+const LW = 160, LH = 90, S = 2;   // logical view; canvas is LW*S × LH*S = 320×180
 const T = 8;                 // tile size (logical px)
 const ROWS = 12;             // world rows (bottom row partly below the screen)
 const HUD_H = 10;
+const HUD_PX = HUD_H * S;
 const INTRO_SECONDS = 2.8;
 const END_SECONDS = 2.4;
 const BARELY_HEALTH = 20;    // same threshold as the original Shelter Dash
@@ -51,70 +67,13 @@ const VARIANT_LABELS = {
   hurricane: 'HURRICANE', tornado: 'TORNADO', flood: 'FLASH FLOOD', heatwave: 'HEAT WAVE',
   drought: 'DROUGHT HEAT', dust_storm: 'DUST STORM', wildfire: 'WILDFIRE',
 };
-
-// ── Palettes (original picks in a limited 8-bit spirit) ─────────────────────
-const K = '#000000', W = '#fcfcfc';
-const PAL = {
-  heat: { sky: ['#f8b800', '#fcd060', '#fce0a8'], far: '#e45c10', farHi: '#f88838', mid: '#ac7c00',
-          grass: '#d8b858', grassHi: '#f8e8a0', dirt: '#a85808', dot: '#7c3c00', hud: '#f8b800' },
-  wind: { sky: ['#3c4c6c', '#58688c', '#7c8ca8'], far: '#2c3c4c', farHi: '#44566a', mid: '#1c4c2c',
-          grass: '#3cb83c', grassHi: '#88f070', dirt: '#7c4c1c', dot: '#503000', hud: '#9cc8fc' },
-  fire: { sky: ['#2c0808', '#881000', '#f83800'], far: '#1c0606', farHi: '#3c0c0c', mid: '#3c0e0e',
-          grass: '#887000', grassHi: '#c8a020', dirt: '#5c3c1c', dot: '#2c1c0c', hud: '#f87858' },
-};
-const SHIRTS = ['#d82800', '#0058f8', '#f8b800', '#00a800', '#9878f8', '#f87858'];
-const SKINS = ['#fcbcb0', '#c87c40', '#8c4c20', '#e0a070', '#fcd8a8', '#a86030'];
-const HAIRS = ['#503000', '#000000', '#7c3c00', '#000000', '#f8b800', '#503000'];
-
-// ── Sprites (8 wide; o=outline s=skin h=hair c=shirt p=pants E=eye) ──────────
-const HEAD = ['..oooo..', '.ohhhho.', '.ohssso.', '.osssEo.', '..osso..'];
-const BLANK = '........';
-const SPR = {
-  stand:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', '.opoopo.', '.opoopo.', '.oo..oo.'],
-  walkA:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', 'opo..opo', 'op....po', 'oo....oo'],
-  walkB:  [...HEAD, '.occcco.', 'osccccso', '.occcco.', '.oppppo.', '.oppppo.', '..oppo..', '..oooo..'],
-  jump:   [...HEAD, '.occccos', '.occcco.', '.occcco.', '.oppppo.', 'opo..opo', 'oo....oo', BLANK],
-  crouch: [BLANK, BLANK, BLANK, BLANK, '..oooo..', '.ohhhho.', '.ohssso.', '.osssEo.',
-           '.occcco.', 'osccccso', '.oppppo.', '.oo..oo.'],
-  down:   [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK,
-           '.ooooooo', 'ohssccpp', 'ohssccpp', '.ooooooo'],
-};
-
-// ── Blocky 3×5 pixel font (rows separated by spaces) ─────────────────────────
-const FONT_ROWS = {
-  A: '.#. #.# ### #.# #.#', B: '##. #.# ##. #.# ##.', C: '.## #.. #.. #.. .##', D: '##. #.# #.# #.# ##.',
-  E: '### #.. ##. #.. ###', F: '### #.. ##. #.. #..', G: '.## #.. #.# #.# .##', H: '#.# #.# ### #.# #.#',
-  I: '### .#. .#. .#. ###', J: '..# ..# ..# #.# .#.', K: '#.# #.# ##. #.# #.#', L: '#.. #.. #.. #.. ###',
-  M: '#.# ### ### #.# #.#', N: '##. #.# #.# #.# #.#', O: '.#. #.# #.# #.# .#.', P: '##. #.# ##. #.. #..',
-  Q: '.#. #.# #.# ##. .##', R: '##. #.# ##. #.# #.#', S: '.## #.. .#. ..# ##.', T: '### .#. .#. .#. .#.',
-  U: '#.# #.# #.# #.# ###', V: '#.# #.# #.# #.# .#.', W: '#.# #.# ### ### #.#', X: '#.# #.# .#. #.# #.#',
-  Y: '#.# #.# .#. .#. .#.', Z: '### ..# .#. #.. ###',
-  0: '### #.# #.# #.# ###', 1: '.#. ##. .#. .#. ###', 2: '##. ..# .#. #.. ###', 3: '##. ..# .#. ..# ##.',
-  4: '#.# #.# ### ..# ..#', 5: '### #.. ##. ..# ##.', 6: '.## #.. ### #.# ###', 7: '### ..# .#. .#. .#.',
-  8: '### #.# ### #.# ###', 9: '### #.# ### ..# ##.',
-  '!': '.#. .#. .#. ... .#.', '.': '... ... ... ... .#.', '-': '... ... ### ... ...', '%': '#.# ..# .#. #.. #.#',
-  ':': '... .#. ... .#. ...', "'": '.#. .#. ... ... ...', '?': '##. ..# .#. ... .#.', '/': '..# ..# .#. #.. #..',
-  '+': '... .#. ### .#. ...', '&': '.#. #.# .#. #.# .##', ',': '... ... ... .#. #..',
-  '<': '..# .#. #.. .#. ..#', '>': '#.. .#. ..# .#. #..',
-};
-const FONT = Object.fromEntries(Object.entries(FONT_ROWS).map(([k, v]) => [k, v.replace(/ /g, '')]));
+const WHITE = '#fcfcfc';
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
 function irand(lo, hi) { return Math.floor(rand(lo, hi + 1)); }
 function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-
-// Split text into lines of at most `max` characters
-function wrap(text, max) {
-  const lines = [];
-  let cur = '';
-  for (const word of text.split(' ')) {
-    if ((cur + ' ' + word).trim().length > max) { lines.push(cur.trim()); cur = word; } else cur += ' ' + word;
-  }
-  if (cur.trim()) lines.push(cur.trim());
-  return lines;
-}
 
 /** Map an event peril/id to a mini-game mode. */
 export function shedModeFor(perilType, eventId) {
@@ -143,7 +102,6 @@ export class ShedDash {
     this.cfg = MODES[this.mode];
     this.variant = opts.variant || null;
     this.label = VARIANT_LABELS[this.variant] || this.cfg.label;
-    this.pal = PAL[this.mode];
     this.stormy = this.mode === 'wind' && ['hurricane', 'flood'].includes(this.variant);
     this.perks = opts.perks || {};
     this.used = {};
@@ -160,11 +118,11 @@ export class ShedDash {
     const members = (opts.family || []).filter(m => m.alive !== false);
     const n = clamp(members.length || 3, 1, 6);
     this.family = Array.from({ length: n }, (_, i) => ({
-      shirt: SHIRTS[i % SHIRTS.length], skin: SKINS[(i * 2 + 1) % SKINS.length], hair: HAIRS[i % HAIRS.length],
       small: typeof members[i]?.age === 'number' && members[i].age < 13, hurt: 0,
     }));
 
     this._buildLevel();
+    this._buildArt();
 
     this.leader = {
       x: this.spawn.x, y: this.spawn.y, w: 6, h: 11, vx: 0, vy: 0, face: 1,
@@ -240,7 +198,7 @@ export class ShedDash {
       if (btn) {
         this.touches.set(e.pointerId, btn);
         if (btn === 'j') this.leader.jumpBuf = BASE.buffer;
-        this.canvas.setPointerCapture?.(e.pointerId);
+        try { this.canvas.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
         e.preventDefault();
       }
     };
@@ -441,7 +399,7 @@ export class ShedDash {
 
   _frame(now) {
     if (!this.running) return;
-    const dt = Math.min(1 / 30, (now - this._last) / 1000);
+    const dt = clamp((now - this._last) / 1000, 0, 1 / 30);   // rAF can stamp a frame just before _last
     this._last = now;
     this._update(dt);
     if (!this.running) return;
@@ -581,7 +539,7 @@ export class ShedDash {
   _pose(L) {
     if (!L.onGround) return 'jump';
     if (L.crouch) return 'crouch';
-    return Math.abs(L.vx) > 4 ? (Math.floor(L.walk) % 2 ? 'walkA' : 'walkB') : 'stand';
+    return Math.abs(L.vx) > 4 ? 'run' + (Math.floor(L.walk * 2) % 4) : 'stand';
   }
 
   _recordHistory() {
@@ -629,7 +587,7 @@ export class ShedDash {
     if (this.perks.firstAid && !this.used.first_aid && this.health > 0 && this.health < 30) {
       this.health += 30;
       this.used.first_aid = 1;
-      this._banner = { text: 'FIRST AID!', t: 1.4, color: W };
+      this._banner = { text: 'FIRST AID!', t: 1.4, color: WHITE };
       this._burst(this.leader.x + 3, this.leader.y, '#f83800', 10);
     }
   }
@@ -842,154 +800,180 @@ export class ShedDash {
     if (this.particles.length > 450) this.particles.splice(0, this.particles.length - 450);
   }
 
+  // ── Art (built once per run) ───────────────────────────────────────────────
+
+  _buildArt() {
+    const look = this.look = lookFor(this.mode, this.variant);
+    const lk = this.lk = LOOKS[look];
+    const art = this.art = {
+      ...buildBackdrop(lk, look),
+      tiles: buildTiles(lk, look),
+      crate: crateSprite(), wreck: wreckSprite(), fence: fenceSprite(),
+      tree: treeSprites(lk, look), cactus: cactusHazard(),
+      debris: { plank: debrisSprites('plank'), tin: debrisSprites('tin') },
+      ember: emberSprite(), marker: arrowMarker(), heart: heartIcon(), drop: dropIcon(), shedIcon: shedIcon(),
+      shed: shedBody(look), doors: shedDoors(), sheet: looseSheet(),
+      runners: runnerSprites(this.family),
+      veil: veil(CW, CH - HUD_PX),
+      birds: birdSprites(look === 'fire' ? '#1a0806' : '#141018'),
+      cloud: cloudSprite(true, { W: '#fff8e8', w: '#f0d8b0', h: '#ffffff' }),
+      chevron: [-1, 1].map(d => {
+        const rows = d < 0 ? ['..##', '.##.', '##..', '.##.', '..##'] : ['##..', '.##.', '..##', '.##.', '##..'];
+        return rows;
+      }),
+    };
+    // Per-column grass blades poking over the edge and flowers (seeded)
+    const r = rng(this.cols * 31 + look.length);
+    this.blades = []; this.flowers = [];
+    for (let col = 0; col < this.cols; col++) {
+      this.blades.push(Array.from({ length: 3 }, () => ({ dx: r.int(0, TILE - 1), h: r.int(1, 2), c: r() < 0.5 ? lk.grass : lk.grassHi })));
+      const fl = [];
+      if (r() < lk.flowerRate) fl.push({ dx: r.int(2, 13), c: r.pick(lk.flowers), p: r.range(0, 6) });
+      if (r() < lk.flowerRate * 0.4) fl.push({ dx: r.int(2, 13), c: r.pick(lk.flowers), p: r.range(0, 6) });
+      this.flowers.push(fl);
+    }
+    art.pit = (() => {          // dry pit: darkness gathering toward the bottom
+      const c = document.createElement('canvas');
+      c.width = TILE; c.height = 64;
+      const g = c.getContext('2d');
+      for (let y = 0; y < 64; y++) ditherFill(g, 0, y, TILE, 1, INK, Math.min(1, y / 48));
+      return c;
+    })();
+  }
+
   // ── Drawing ────────────────────────────────────────────────────────────────
 
   _draw() {
-    const c = this.bctx;
-    const cam = Math.round(this.camX);
-    const r = (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; c.fillStyle = col; c.fillRect(Math.round(x) * S, Math.round(y) * S, Math.round(w) * S, Math.round(h) * S); };
-    const wr = (x, y, w, h, col) => r(x - cam, y, w, h, col);   // world-space rect
+    const g = this.bctx;
+    const cam = Math.round(this.camX * S);
     const T0 = this.elapsed + this.phaseT;
 
-    this._drawSky(r, T0);
-    this._drawParallax(r, cam, T0);
-    this._drawDecor(wr, cam, T0, true);
-    this._drawTiles(wr, cam);
-    this._drawDecor(wr, cam, T0, false);
-    this._drawShed(wr, T0);
-    if (this.mode === 'heat') this._drawCacti(wr, cam);
-    if (this.mode === 'fire') this._drawVents(wr, cam, T0);
-    this._drawFamily(wr, T0);
-    if (this.mode === 'wind') this._drawDebris(wr);
-    if (this.mode === 'fire') { this._drawEmbers(wr); this._drawFireWall(wr, T0); }
-    this._drawParticles(wr);
-    this._drawOverlay(c, r, T0);
+    this._drawBackdrop(g, cam, T0);
+    this._drawDecor(g, cam, T0, true);
+    this._drawTiles(g, cam, T0);
+    this._drawDecor(g, cam, T0, false);
+    this._drawShed(g, cam, T0);
+    if (this.mode === 'heat') this._drawCacti(g, cam);
+    if (this.mode === 'fire') this._drawVents(g, cam, T0);
+    this._drawFamily(g, cam, T0);
+    if (this.mode === 'wind') this._drawDebris(g, cam);
+    if (this.mode === 'fire') { this._drawEmbers(g, cam); this._drawFireWall(g, cam, T0); }
+    this._drawParticles(g, cam);
+    this._drawOverlay(g, T0);
 
     // Composite (heat shimmer / shake)
     const ctx = this.ctx;
-    ctx.clearRect(0, 0, LW * S, LH * S);
+    ctx.clearRect(0, 0, CW, CH);
     const sx = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake) * S : 0;
     const sy = this.shake > 0 ? Math.round(rand(-2, 2) * this.shake) * S : 0;
     if (this.mode === 'heat') {
       const amp = 1 + (1 - this.stamina / 100) * 2;
-      for (let y = 0; y < LH * S; y += 2) {
-        const off = y > HUD_H * S ? Math.round(Math.sin(y * 0.09 + T0 * 7) * amp) : 0;
-        ctx.drawImage(this.buf, 0, y, LW * S, 2, off + sx, y + sy, LW * S, 2);
+      for (let y = 0; y < CH; y += 2) {
+        const off = y > HUD_PX ? Math.round(Math.sin(y * 0.09 + T0 * 7) * amp) : 0;
+        ctx.drawImage(this.buf, 0, y, CW, 2, off + sx, y + sy, CW, 2);
       }
     } else ctx.drawImage(this.buf, sx, sy);
-    if (this.flash > 0) { ctx.fillStyle = `rgba(248,56,0,${this.flash * 0.3})`; ctx.fillRect(0, 0, LW * S, LH * S); }
+    if (this.flash > 0) { ctx.fillStyle = `rgba(248,56,0,${this.flash * 0.3})`; ctx.fillRect(0, 0, CW, CH); }
 
-    const hr = (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; ctx.fillStyle = col; ctx.fillRect(Math.round(x) * S, Math.round(y) * S, Math.round(w) * S, Math.round(h) * S); };
-    this._drawHUD(hr, T0);
-    if (this.showTouch && this.phase === 'play') this._drawButtons(hr);
-    if (this.phase === 'intro') this._drawIntro(hr, T0);
-    if (this.phase === 'enter' || this.phase === 'collapse') this._drawEnd(hr);
+    this._drawHUD(ctx, T0);
+    if (this.showTouch && this.phase === 'play') this._drawButtons(ctx);
+    if (this.phase === 'intro') this._drawIntro(ctx, T0);
+    if (this.phase === 'enter' || this.phase === 'collapse') this._drawEnd(ctx);
   }
 
-  // Blocky pixel text. scale = logical px per font pixel.
-  _text(r, str, x, y, color, scale = 1, align = 'left', shadow = true) {
-    const s = String(str).toUpperCase();
-    const width = s.length * 4 * scale - scale;
-    let cx = Math.round(align === 'center' ? x - width / 2 : align === 'right' ? x - width : x);
-    for (const ch of s) {
-      const g = FONT[ch];
-      if (g) {
-        for (let i = 0; i < 15; i++) {
-          if (g[i] !== '#') continue;
-          const px = cx + (i % 3) * scale, py = y + Math.floor(i / 3) * scale;
-          if (shadow) r(px + scale, py + scale, scale, scale, K);
-          r(px, py, scale, scale, color);
+  _drawBackdrop(g, cam, T0) {
+    const A = this.art, look = this.look, gust = this.gust.state === 'gust';
+    g.drawImage(A.sky, 0, 0);
+    if (look === 'heat' || look === 'dust') {
+      const sx = 252, sy = 46, pulse = Math.floor(T0 * 2) % 2;
+      if (look === 'heat') {
+        for (let k = 0; k < 12; k++) {                         // pulsing rays
+          const a = k * Math.PI / 6 + T0 * 0.15;
+          for (let s = 27 + pulse * 2; s < 33 + pulse * 3; s++) R(g, Math.round(sx + Math.cos(a) * s), Math.round(sy + Math.sin(a) * s), 1, 1, '#fff4c8');
         }
-      }
-      cx += 4 * scale;
-    }
-  }
-
-  _drawSky(r, T0) {
-    const P = this.pal;
-    r(0, 0, LW, LH, P.sky[0]);
-    r(0, 26, LW, 20, P.sky[1]);
-    r(0, 46, LW, LH - 46, P.sky[2]);
-    for (let x = 0; x < LW; x += 2) {                               // dithered band edges
-      r(x + (x % 4 ? 1 : 0), 25, 1, 1, P.sky[1]);
-      r(x + (x % 4 ? 0 : 1), 45, 1, 1, P.sky[2]);
-    }
-    if (this.mode === 'heat') {                                     // blocky sun with pulsing rays
-      const pulse = Math.floor(T0 * 2) % 2;
-      r(122, 14, 16, 16, W); r(120, 16, 20, 12, W); r(124, 12, 12, 20, W);
-      r(124, 16, 12, 12, '#fce0a8');
-      for (const [dx, dy] of [[-6, 20], [24, 20], [18, 4], [0, 4], [18, 34], [0, 34]]) r(122 + dx, 2 + dy, 2 + pulse, 2 + pulse, W);
-    }
-    if (this.mode === 'fire') r(0, LH - 20, LW, 20, '#f87858');
-  }
-
-  _drawParallax(r, cam, T0) {
-    const P = this.pal;
-    // far mesas / ridges (0.2×)
-    const off = (cam * 0.2) % 16;
-    for (let i = 0; i < 13; i++) {
-      const hgt = this.far[(i + Math.floor(cam * 0.2 / 16)) % this.far.length];
-      const x = i * 16 - off;
-      r(x, 66 - hgt, 16, hgt + 30, P.far);
-      r(x, 66 - hgt, 16, 2, P.farHi);
-      r(x + 2, 66 - hgt + 2, 2, 1, P.farHi);
-    }
-    // clouds / smoke banks
-    for (const cl of this.clouds) {
-      const drift = this.mode === 'wind' ? -T0 * (this.gust.state === 'gust' ? 40 : 14) : T0 * 3;
-      const x = ((cl.x - cam * 0.1 + drift) % 200 + 200) % 200 - 30;
-      const col = this.mode === 'fire' ? '#3c0c0c' : this.mode === 'wind' ? '#2c3c4c' : W;
-      const out = this.mode === 'heat' ? '#f8b800' : K;
-      const w = cl.w * 6;
-      r(x - 1, cl.y + 3, w + 2, 6, out);
-      r(x, cl.y + 2, w, 6, col);
-      r(x + 4, cl.y - 1, w - 10, 4, out); r(x + 5, cl.y, w - 12, 4, col);
-    }
-    // mid silhouettes (0.45×): cacti / burnt snags / bending trees
-    const moff = (cam * 0.45) % 20;
-    for (let i = 0; i < 10; i++) {
-      const m = this.mid[(i + Math.floor(cam * 0.45 / 20)) % this.mid.length];
-      const x = i * 20 - moff, base = 74;
-      if (this.mode === 'heat') {
-        r(x + 8, base - m.h, 4, m.h, P.mid); r(x + 4, base - m.h + 5, 4, 3, P.mid); r(x + 4, base - m.h + 2, 2, 4, P.mid);
-        r(x + 12, base - m.h + 8, 4, 3, P.mid); r(x + 14, base - m.h + 4, 2, 5, P.mid);
-      } else if (this.mode === 'fire') {
-        r(x + 9, base - m.h, 2, m.h, P.mid); r(x + 6, base - m.h + 4, 3, 1, P.mid); r(x + 11, base - m.h + 7, 3, 1, P.mid);
-        if (m.kind > 0.6 && Math.floor(T0 * 6 + i) % 3) r(x + 9, base - m.h - 2, 2, 2, '#f83800');
+        disc(g, sx, sy, 24, '#ffc860'); disc(g, sx, sy, 20, '#ffe08a'); disc(g, sx, sy, 15, '#fff2c0'); disc(g, sx, sy, 9, '#ffffff');
       } else {
-        const sway = Math.round(Math.sin(T0 * 3 + i) * (this.gust.state === 'gust' ? 3 : 1));
-        r(x + 9, base - m.h + 8, 2, m.h - 8, P.mid);
-        r(x + 3 + sway, base - m.h, 14, 10, P.mid); r(x + 5 + sway, base - m.h - 3, 10, 4, P.mid);
+        disc(g, sx, sy, 14, '#e8c890'); disc(g, sx, sy, 10, '#f4dcb0');
+      }
+    }
+    if (look === 'fire') { disc(g, 64, 64, 15, '#d8401a'); disc(g, 64, 64, 11, '#ff6a2a'); disc(g, 64, 64, 6, '#ff9a4a'); }
+    if (A.clouds) {
+      const drift = look === 'fire' ? T0 * 5 : T0 * (gust ? 46 : 16);
+      drawWrap(g, A.clouds, cam * 0.08 + drift, look === 'fire' ? 14 : look === 'stormy' ? -6 : 2);
+    } else if (look === 'heat') {
+      for (let i = 0; i < 3; i++) {
+        const x = ((i * 130 + 40 - cam * 0.06 + T0 * 3) % 400 + 400) % 400 - 50;
+        draw(g, A.cloud, x, 20 + i * 11);
+      }
+    }
+    if (this.stormy && this._lightning(T0)) bolt(g, 40 + (Math.floor(T0 * 3 / 23) * 97) % 240, 0, FAR_Y + 50, Math.floor(T0 * 3));
+    drawWrap(g, A.far, cam * 0.2, FAR_Y);
+    if (look === 'wind' || look === 'stormy') {                 // turbines spin up in the gusts
+      const off = ((cam * 0.2) % 640 + 640) % 640;
+      [70, 236, 410, 560].forEach((x, k) => {
+        let sx = ((x - off) % 640 + 640) % 640;
+        if (sx > CW + 30) sx -= 640;
+        if (sx < -30) return;
+        const cols = look === 'stormy' ? ['#8a94a2', '#5a6472'] : ['#d8dee6', '#98a2b0'];
+        turbine(g, sx, FAR_Y + A.farTops[x] + 3, 30 - (k % 2) * 6, T0 * (gust ? 10 : 3.5) + k, cols[0], cols[1]);
+      });
+    }
+    // Birds: vultures circle in the heat, flocks flee the fire, get blown about in the wind
+    for (let i = 0; i < 4; i++) {
+      let bx, by;
+      if (look === 'heat' || look === 'dust') { bx = 200 + Math.cos(T0 * 0.8 + i * 1.6) * 40; by = 40 + Math.sin(T0 * 0.8 + i * 1.6) * 10 + i * 3; }
+      else if (look === 'fire') { bx = ((T0 * 40 + i * 24) % (CW + 60)) - 30; by = 30 + i * 4 + Math.sin(T0 * 3 + i) * 3; }
+      else { bx = CW - ((T0 * (gust ? 120 : 30) + i * 70) % (CW + 60)) + 30; by = 30 + i * 9 + Math.sin(T0 * 5 + i) * 4; }
+      draw(g, A.birds[Math.abs(Math.floor(T0 * 6 + i)) % 2], bx, by);
+    }
+    drawWrap(g, A.mid, cam * 0.45, MID_Y);
+    if (look === 'fire') {                                      // fire line cresting the hills
+      const off = cam * 0.45;
+      for (let x = 0; x < CW; x++) {
+        const mx = ((Math.round(x + off) % 640) + 640) % 640;
+        if (Math.floor(mx / 90) % 3 === 1) continue;
+        const top = MID_Y + A.midTops[mx];
+        const h = Math.round(3 + 2.5 * Math.sin(mx * 0.31 + T0 * 7) + 2 * Math.sin(mx * 0.11 - T0 * 3));
+        if (h <= 0) continue;
+        R(g, x, top - h, 1, h, '#e04a10');
+        if (h > 2) R(g, x, top - h + 2, 1, h - 2, '#ffa030');
       }
     }
   }
 
-  _drawTiles(wr, cam) {
-    const P = this.pal;
-    const c0 = Math.max(0, Math.floor(cam / T) - 1), c1 = Math.min(this.cols - 1, c0 + Math.ceil(LW / T) + 2);
+  _lightning(T0) { return Math.floor(T0 * 3) % 23 === 0; }
+
+  _drawTiles(g, cam, T0) {
+    const A = this.art, lk = this.lk;
+    const c0 = Math.max(0, Math.floor(this.camX / T) - 1), c1 = Math.min(this.cols - 1, c0 + Math.ceil(LW / T) + 2);
     for (let col = c0; col <= c1; col++) {
       const h = this.ground[col];
-      const x = col * T;
+      const x = col * TILE - cam;
       if (h > 0) {
-        const top = (ROWS - h) * T;
-        wr(x, top, T, LH - top + 10, P.dirt);
-        for (let y = top + 8; y < LH; y += 8) {                         // dirt pattern
-          const odd = (col + y / 8) % 2;
-          wr(x + (odd ? 1 : 5), y + 2, 2, 1, P.dot);
-          wr(x + (odd ? 5 : 2), y + 5, 1, 1, P.dot);
-          wr(x, y, T, 1, P.dot);
+        const top = (ROWS - h) * TILE;
+        g.drawImage(A.tiles.top[col % 3], x, top);
+        for (let y = top + TILE, k = 0; y < CH; y += TILE, k++) g.drawImage(A.tiles.dirt[(col + k) % 2], x, y);
+        const hl = this.ground[col - 1], hr = this.ground[col + 1];
+        if (!hl || hl < h) { R(g, x, top, 1, CH - top, INK); R(g, x + 1, top + 8, 1, CH - top - 8, lk.dirtHi); }
+        if (!hr || hr < h) { R(g, x + TILE - 1, top, 1, CH - top, INK); R(g, x + TILE - 2, top + 8, 1, CH - top - 8, lk.dirtDk); }
+        R(g, x, top - 1, TILE, 1, INK);
+        for (const b of this.blades[col]) R(g, x + b.dx, top - 1 - b.h, 1, b.h, b.c);
+        for (const f of this.flowers[col]) {
+          const fx = x + f.dx, sway = Math.round(Math.sin(T0 * 2 + f.p) * 0.6);
+          R(g, fx, top - 2, 1, 2, lk.grassDk);
+          R(g, fx + sway - 1, top - 4, 3, 1, f.c); R(g, fx + sway, top - 5, 1, 3, f.c); R(g, fx + sway, top - 4, 1, 1, '#ffe8a0');
         }
-        wr(x, top, T, 3, P.grass);                                        // grass cap
-        wr(x, top, T, 1, P.grassHi);
-        wr(x + (col % 3), top + 3, 2, 1, P.grass);
-        if (!this.ground[col - 1] || this.ground[col - 1] < h) wr(x, top, 1, LH - top, K);
-        if (!this.ground[col + 1] || this.ground[col + 1] < h) wr(x + T - 1, top, 1, LH - top, K);
-        wr(x, top - 1, T, 1, K);
       } else if (this.stormy) {                                          // flooded pit
-        wr(x, LH - 9, T, 10, '#2038ec'); wr(x, LH - 9, T, 1, '#3cbcfc');
+        const wy = (LH - 9) * S;
+        R(g, x, wy, TILE, CH - wy, '#1a3478');
+        ditherFill(g, x, wy + 4, TILE, CH - wy - 4, '#10245a', 0.35);
+        R(g, x, wy, TILE, 1, '#8ad8ff');
+        for (let k = 0; k < 2; k++) R(g, x + ((Math.floor(T0 * 10) + k * 8 + col * 3) % TILE), wy + 1 + k * 2, 3, 1, '#3c8cfc');
+      } else {
+        g.drawImage(A.pit, x, CH - 64);
       }
       for (let row = 0; row < ROWS; row++) {
-        if (this._extraSolidAt(col, row) && !this._decorAt(col, row)) this._drawCrate(wr, x, row * T);
+        if (this._extraSolidAt(col, row) && !this._decorAt(col, row)) draw(g, A.crate, x + 1, row * TILE + 1);
       }
     }
   }
@@ -999,133 +983,90 @@ export class ShedDash {
                                 (d.kind === 'fence' && d.col === col && d.row === row));
   }
 
-  _drawCrate(wr, x, y) {
-    wr(x, y, T, T, K);
-    wr(x + 1, y + 1, 6, 6, '#c84c0c');
-    wr(x + 1, y + 1, 6, 1, '#fc9838');
-    wr(x + 1, y + 1, 1, 6, '#fc9838');
-    for (let k = 0; k < 6; k++) { wr(x + 1 + k, y + 1 + k, 1, 1, '#7c2c00'); wr(x + 6 - k, y + 1 + k, 1, 1, '#7c2c00'); }
-  }
-
-  _drawDecor(wr, cam, T0, back) {
+  _drawDecor(g, cam, T0, back) {
+    const A = this.art;
     for (const d of this.decor) {
-      const x = d.col * T;
-      if (x < cam - 30 || x > cam + LW + 10) continue;
+      const x = d.col * TILE - cam;
+      if (x < -60 || x > CW + 30) continue;
       if (d.kind === 'tree' && !!d.back === back) {
-        const top = (ROWS - this.ground[d.col]) * T;
-        const sway = this.mode === 'wind' ? Math.round(Math.sin(T0 * 4 + d.col) * (this.gust.state === 'gust' ? 2 : 1)) : 0;
-        const leaf = this.mode === 'heat' ? ['#88a800', '#b8d838'] : this.mode === 'fire' ? ['#3c1c0c', '#5c2c0c'] : ['#00a800', '#58d854'];
-        if (this.mode === 'heat') wr(x - 8, top - 1, 24, 2, 'rgba(0,0,0,0.25)');   // shade on the ground
-        wr(x + 2, top - 14, 4, 14, K); wr(x + 3, top - 14, 2, 14, '#7c4c1c');
-        wr(x - 7 + sway, top - 25, 22, 13, K);
-        wr(x - 6 + sway, top - 24, 20, 11, leaf[0]);
-        wr(x - 3 + sway, top - 28, 14, 5, K); wr(x - 2 + sway, top - 27, 12, 4, leaf[0]);
-        wr(x - 4 + sway, top - 23, 6, 3, leaf[1]); wr(x + 3 + sway, top - 26, 5, 2, leaf[1]);
-        if (this.mode === 'fire' && Math.floor(T0 * 8 + d.col) % 2) wr(x + 4 + sway, top - 29, 3, 2, '#f83800');
+        const top = (ROWS - this.ground[d.col]) * TILE;
+        const sway = this.mode === 'wind' ? Math.round(Math.sin(T0 * 4 + d.col) * (this.gust.state === 'gust' ? 4 : 2)) : 0;
+        if (this.mode === 'heat') {                                       // the shade you can rest in
+          g.globalAlpha = 0.35; ditherFill(g, x - 16, top, 48, 3, INK, 0.6); g.globalAlpha = 1;
+        }
+        draw(g, A.tree.trunk, x + 4, top - 29);
+        draw(g, A.tree.canopy, x - 15 + sway, top - 58);
+        if (this.mode === 'fire') {
+          for (let k = 0; k < 3; k++) {
+            if (Math.floor(T0 * 8 + d.col + k) % 3 === 0) continue;
+            const fx = x - 8 + k * 14 + sway, fy = top - 56 + (k % 2) * 8;
+            R(g, fx, fy, 3, 4, '#f04a0c'); R(g, fx + 1, fy + 1, 1, 3, '#ffd040');
+          }
+        }
       }
-      if (!back && d.kind === 'car') {
-        const y = d.row * T;
-        wr(x, y + 1, 24, 7, K);
-        wr(x + 1, y + 2, 22, 4, '#a81000'); wr(x + 1, y + 2, 22, 1, '#e45c10');
-        wr(x + 5, y - 3, 13, 5, K); wr(x + 6, y - 2, 11, 3, '#a81000');
-        wr(x + 7, y - 2, 4, 2, '#3cbcfc'); wr(x + 12, y - 2, 4, 2, '#3cbcfc');
-        wr(x + 3, y + 5, 5, 3, K); wr(x + 16, y + 5, 5, 3, K);
-        wr(x + 4, y + 6, 3, 1, '#bcbcbc'); wr(x + 17, y + 6, 3, 1, '#bcbcbc');
-        wr(x + 9, y + 3, 3, 2, '#503000');
-      }
-      if (!back && d.kind === 'fence') {
-        const y = d.row * T;
-        wr(x + 1, y - 2, 2, 10, K); wr(x + 5, y - 2, 2, 10, K);
-        wr(x + 1, y - 1, 1, 9, W); wr(x + 5, y - 1, 1, 9, W);
-        wr(x, y + 1, 8, 2, K); wr(x, y + 5, 8, 2, K);
-        wr(x, y + 1, 8, 1, '#bcbcbc'); wr(x, y + 5, 8, 1, '#bcbcbc');
-      }
+      if (!back && d.kind === 'car') draw(g, A.wreck, x + 1, d.row * TILE - 5);
+      if (!back && d.kind === 'fence') draw(g, A.fence, x, d.row * TILE - 3);
     }
   }
 
-  _drawCacti(wr, cam) {
+  _drawCacti(g, cam) {
     for (const c of this.cacti) {
-      const x = c.col * T, top = (ROWS - this.ground[c.col]) * T;
-      if (x < cam - 10 || x > cam + LW + 10) continue;
-      wr(x + 2, top - 11, 4, 11, K); wr(x + 3, top - 10, 2, 10, '#00a800');
-      wr(x, top - 8, 3, 5, K); wr(x + 1, top - 7, 1, 3, '#00a800');
-      wr(x + 5, top - 9, 3, 4, K); wr(x + 6, top - 8, 1, 2, '#00a800');
-      wr(x + 3, top - 9, 1, 1, '#b8f818'); wr(x + 4, top - 5, 1, 1, '#b8f818');
+      const x = c.col * TILE - cam, top = (ROWS - this.ground[c.col]) * TILE;
+      if (x < -20 || x > CW + 10) continue;
+      draw(g, this.art.cactus, x + 2, top - 20);
     }
   }
 
-  _drawVents(wr, cam, T0) {
+  _drawVents(g, cam, T0) {
     for (const v of this.vents) {
-      const x = v.col * T, top = (ROWS - this.ground[v.col]) * T;
-      if (x < cam - 10 || x > cam + LW + 10) continue;
-      wr(x + 1, top, 6, 2, K); wr(x + 2, top, 4, 1, '#503000');                      // charred crack
-      if (v.state === 'warn') wr(x + 2, top - 1, 4, 1, Math.floor(T0 * 16) % 2 ? '#f8b800' : '#f83800');
+      const x = v.col * TILE - cam, top = (ROWS - this.ground[v.col]) * TILE;
+      if (x < -20 || x > CW + 10) continue;
+      R(g, x + 2, top - 1, 12, 3, INK);                                   // charred crack
+      R(g, x + 3, top, 10, 1, Math.floor(T0 * 3 + v.col) % 4 ? '#3a1408' : '#7a2a0c');
+      if (v.state === 'warn') {
+        R(g, x + 3, top - 1, 10, 1, Math.floor(T0 * 16) % 2 ? '#ffb030' : '#f04a0c');
+        g.globalAlpha = 0.25; disc(g, x + 8, top - 2, 7, '#ff8a2a'); g.globalAlpha = 1;
+      }
       if (v.state === 'burn') {
-        const f = Math.floor(T0 * 14) % 3;
-        const hgt = 20 + f * 2;
-        wr(x, top - hgt, T, hgt, K);
-        wr(x + 1, top - hgt + 1, 6, hgt - 1, '#d82800');
-        wr(x + 2, top - hgt + 4, 4, hgt - 5, '#f87800');
-        wr(x + 3, top - hgt + 8, 2, hgt - 9, '#fce0a8');
-        wr(x + (f === 1 ? 1 : 5), top - hgt - 2, 2, 2, '#f87800');
+        g.globalAlpha = 0.22; disc(g, x + 8, top - 20, 20, '#ff8a2a'); g.globalAlpha = 1;
+        flameWall(g, x, x + TILE, top, 46, T0 * 1.4, 1, v.col * 3);
       }
     }
   }
 
   // The rickety shed: warped planks with gaps, a crooked tin roof, a lit door
-  _drawShed(wr, T0) {
-    const s = this.shed;
+  _drawShed(g, cam, T0) {
+    const s = this.shed, A = this.art;
     const wob = this.mode === 'wind' ? Math.round(Math.sin(T0 * 9) * (this.gust.state === 'gust' ? 1.4 : 0.6)) : 0;
     const rattle = this.doorShut ? Math.round(Math.sin(T0 * 34) * Math.max(0, 1.2 - this.phaseT / 1.6)) : 0;
-    const x = s.x + wob + rattle, y = s.y, w = 40, h = 34;
-    wr(x - 1, y + 7, w + 2, h - 7, K);
-    const planks = ['#a85808', '#884000', '#c86c1c', '#7c3c00'];
-    for (let i = 0; i < w; i += 4) {
-      const sag = i > w - 10 ? 1 : 0;
-      wr(x + i, y + 8 + sag, 3, h - 8 - sag, planks[(i / 4) % 4]);
-      wr(x + i, y + 8 + sag, 1, h - 8 - sag, '#e09048');
+    const x = Math.round(s.x * S) - cam + (wob + rattle) * S, y = Math.round(s.y * S);
+    if (x > CW + 10 || x < -100) return;
+    if (!this.doorShut) {                                                 // warm light spilling out
+      g.globalAlpha = 0.25; ditherFill(g, x - 4, y + 66, 34, 4, '#ffd870', 0.5); g.globalAlpha = 1;
     }
-    wr(x + 22, y + 18, 3, 8, K);                                                   // missing plank
-    wr(x + 27, y + 12, 9, 7, K); wr(x + 28, y + 13, 7, 5, '#503000');              // boarded window
-    wr(x + 28, y + 13, 7, 1, '#c86c1c'); wr(x + 28, y + 16, 7, 1, '#c86c1c');
-    for (let i = -3; i < w + 4; i++) {                                             // crooked tin roof
-      const sag = Math.round(i * 0.1);
-      wr(x + i, y + 2 + sag, 1, 6, K);
-      wr(x + i, y + 3 + sag, 1, 4, i % 2 ? '#bcbcbc' : '#7c7c7c');
+    draw(g, A.shed, x - 4, y);
+    R(g, x + 5, y + 27, 22, 41, INK);                                     // door frame
+    if (this.doorShut) draw(g, A.doors.shut, x + 6, y + 28);
+    else {
+      draw(g, A.doors.open, x + 6, y + 28);
+      if (Math.floor(T0 * 4) % 2) R(g, x + 15, y + 34, 2, 2, '#ffffff');  // lantern flicker
+      const swing = Math.round(2 + Math.sin(T0 * (this.mode === 'wind' ? 8 : 2)) * 2) * S;
+      draw(g, A.doors.leaf, x + 1 - swing, y + 28);
     }
-    wr(x + 6, y + 4, 4, 2, '#c84c0c'); wr(x + 26, y + 5, 3, 2, '#c84c0c');          // rust
-    const flap = Math.round(Math.sin(T0 * 12) * (this.mode === 'wind' ? 2 : 0.5));
-    wr(x + w - 5, y + 2 + flap, 8, 2, K); wr(x + w - 5, y + 2 + flap, 8, 1, W);     // loose sheet
-    const dx = x + 3, dy = y + 14;                                                 // door
-    wr(dx - 1, dy - 1, 12, h - 13, K);
-    if (this.doorShut) {
-      wr(dx, dy, 10, h - 14, '#884000');
-      wr(dx + 2, dy + 2, 1, h - 18, '#503000'); wr(dx + 6, dy + 2, 1, h - 18, '#503000');
-    } else {
-      wr(dx, dy, 10, h - 14, Math.floor(T0 * 4) % 2 ? '#f8d878' : '#fce0a8');
-      wr(dx + 3, dy + 3, 4, 4, '#f8b800');
-      const swing = Math.round(2 + Math.sin(T0 * (this.mode === 'wind' ? 8 : 2)) * 2);
-      wr(dx - swing - 1, dy, 3, h - 14, K); wr(dx - swing, dy + 1, 2, h - 16, '#a85808');
-    }
+    const flap = Math.round(Math.sin(T0 * 12) * (this.mode === 'wind' ? 2 : 0.5)) * S;
+    draw(g, A.sheet, x + 70, y + 4 + flap);                               // loose sheet
   }
 
-  _drawSprite(wr, tmpl, x, y, face, m, hurtFlash) {
-    const cols = { o: K, s: m.skin, h: m.hair, c: hurtFlash ? W : m.shirt, p: '#24188c', E: K };
-    for (let row = 0; row < tmpl.length; row++) {
-      const line = tmpl[row];
-      for (let i = 0; i < 8; i++) {
-        const ch = line[face > 0 ? i : 7 - i];
-        if (ch && ch !== '.' && cols[ch]) wr(x + i, y + row, 1, 1, cols[ch]);
-      }
-    }
-  }
-
-  _drawFamily(wr, T0) {
-    for (let i = this.family.length - 1; i >= 0; i--) {         // followers behind, leader in front
-      const m = this.family[i];
+  _drawFamily(g, cam, T0) {
+    const A = this.art, L = this.leader;
+    const n = this.family.length;
+    for (let i = n - 1; i >= 0; i--) {                         // followers behind, leader in front
+      const m = this.family[i], fr = A.runners[i];
       let st;
-      if (i === 0) {
-        const L = this.leader;
+      if (this.phase === 'intro') {                            // lined up behind the leader, jogging in place
+        const gap = Math.min(7, 20 / Math.max(1, n - 1));
+        st = { x: L.x - i * gap, y: L.y + L.h, face: 1, pose: 'run' + (Math.floor(T0 * 8 + i) % 4) };
+      } else if (i === 0) {
         st = { x: L.x, y: L.y + L.h, face: L.face, pose: this._pose(L) };
         if (L.invuln > 0 && this.phase === 'play' && Math.floor(T0 * 20) % 2) continue;
       } else {
@@ -1135,137 +1076,196 @@ export class ShedDash {
       if (this.phase === 'enter' && st.x > this.doorX + 2) continue;    // already inside
       const pose = this.phase === 'collapse' ? 'down' : st.pose;
       if (this.phase === 'collapse' && i > 0) st = { ...st, y: this._groundTopAt(st.x + 3) };
-      let tmpl = SPR[pose] || SPR.stand;
-      if (m.small && pose !== 'down' && pose !== 'crouch') tmpl = tmpl.slice(0, 4).concat(tmpl.slice(6));
-      this._drawSprite(wr, tmpl, Math.round(st.x) - 1, Math.round(st.y) - tmpl.length, st.face, m, m.hurt > 0 && Math.floor(T0 * 30) % 2);
+      let spr = pose === 'down' ? fr.down : pose === 'jump' ? fr.jump : pose === 'crouch' ? fr.crouch
+        : pose.startsWith('run') ? fr.run[+pose[3] || 0] : fr.stand;
+      if (m.hurt > 0 && Math.floor(T0 * 30) % 2) spr = silhouette(spr, '#ffffff');
+      const feet = Math.round(st.y * S);
+      const sx = pose === 'down' ? Math.round(st.x * S) - cam - 4 : Math.round(st.x * S) - cam + (TILE - 4 - fr.w) / 2 + 1;
+      draw(g, spr, sx, feet - spr.h, st.face < 0);
       if (i === 0 && this.phase === 'play') {                          // leader marker
         const bob = Math.floor(T0 * 4) % 2;
-        wr(Math.round(st.x) + 2, Math.round(st.y) - tmpl.length - 4 + bob, 2, 2, '#f8b800');
+        draw(g, A.marker, Math.round(st.x * S) - cam + 4, feet - spr.h - 7 + bob);
       }
     }
-    if (this.mode === 'heat' && this.stamina < 25 && Math.floor(T0 * 3) % 2) wr(this.leader.x + 7, this.leader.y - 3, 1, 2, '#3cbcfc');
+    if (this.mode === 'heat' && this.stamina < 25 && Math.floor(T0 * 3) % 2 && this.phase === 'play') {
+      const x = Math.round(L.x * S) - cam + 14, y = Math.round(L.y * S) - 6;
+      R(g, x, y, 1, 1, '#d8f4ff'); R(g, x - 1, y + 1, 3, 2, '#3cbcfc'); R(g, x, y + 3, 1, 1, '#2a8ad8');
+    }
   }
 
-  _drawDebris(wr) {
+  _drawDebris(g, cam) {
     for (const d of this.debris) {
-      const spin = Math.floor(d.rot) % 2;
-      const col = d.kind === 'plank' ? ['#c86c1c', '#7c3c00'] : ['#bcbcbc', '#7c7c7c'];
-      if (!spin) { wr(d.x - 4, d.y - 2, 9, 4, K); wr(d.x - 3, d.y - 1, 7, 2, col[0]); wr(d.x - 3, d.y, 7, 1, col[1]); }
-      else { wr(d.x - 2, d.y - 4, 4, 8, K); wr(d.x - 1, d.y - 3, 2, 6, col[0]); wr(d.x, d.y - 3, 1, 6, col[1]); }
+      const spr = this.art.debris[d.kind][Math.floor(d.rot) % 4];
+      draw(g, spr, Math.round(d.x * S) - cam - spr.w / 2, Math.round(d.y * S - spr.h / 2));
     }
   }
 
-  _drawEmbers(wr) {
+  _drawEmbers(g, cam) {
     for (const e of this.embers) {
-      wr(e.x - 2, e.y - 2, 4, 4, K); wr(e.x - 1, e.y - 1, 2, 2, '#f8b800');
-      wr(e.x + 1, e.y - 4, 1, 2, 'rgba(120,120,120,0.6)');
+      const x = Math.round(e.x * S) - cam, y = Math.round(e.y * S);
+      g.globalAlpha = 0.5; R(g, x + 1, y - 7, 1, 4, '#8a7a74'); R(g, x + 2, y - 11, 1, 3, '#6a5e5a'); g.globalAlpha = 1;
+      draw(g, this.art.ember, x - 2, y - 2);
     }
   }
 
-  _drawFireWall(wr, T0) {
-    const f = this.fireWall;
-    for (let y = HUD_H; y < LH; y += 4) {
-      const lick = Math.round(Math.sin(y * 0.5 + T0 * 10) * 3 + Math.sin(y * 0.17 + T0 * 4) * 2);
-      wr(f - 60, y, 60 + lick + 2, 4, K);
-      wr(f - 60, y, 60 + lick, 4, '#d82800');
-      wr(f - 60, y, 56 + lick, 4, '#f87800');
-      wr(f - 60, y, 50 + lick, 4, '#fce0a8');
+  _drawFireWall(g, cam, T0) {
+    const f = Math.round(this.fireWall * S) - cam;
+    if (f < -40) return;
+    g.globalAlpha = 0.18; ditherFill(g, Math.max(0, f), HUD_PX, 28, CH - HUD_PX, '#ff8a2a', 0.5); g.globalAlpha = 1;
+    for (let k = 0; k < 4; k++) {                                         // smoke rolling up behind the flames
+      const py = HUD_PX + 6 + ((k * 23 + T0 * 18) % 60);
+      drawPuff(g, f + 2 + Math.sin(T0 + k) * 4, py, 8 + k * 2, '#2a1416', '#6a2410', 0.5);
+    }
+    for (let y = HUD_PX; y < CH; y += 2) {
+      const ly = y / S;
+      const lick = Math.round((Math.sin(ly * 0.5 + T0 * 10) * 3 + Math.sin(ly * 0.17 + T0 * 4) * 2) * S);
+      const tip = f + lick;
+      R(g, 0, y, tip + 2, 2, '#5a0a04');
+      R(g, 0, y, tip, 2, '#c81e08');
+      R(g, 0, y, tip - 6, 2, '#f05a10');
+      R(g, 0, y, tip - 14, 2, '#ff9a1e');
+      R(g, 0, y, tip - 26, 2, '#ffe060');
+      R(g, 0, y, tip - 46, 2, '#fff8c0');
+      if (((y * 7 + Math.floor(T0 * 14)) % 19) === 0) R(g, tip + 4, y, 3, 2, '#f05a10');   // detached licks
     }
   }
 
-  _drawParticles(wr) {
+  _drawParticles(g, cam) {
+    const gust = this.gust.state === 'gust';
     for (const p of this.particles) {
       const k = 1 - p.t / p.life;
+      const x = Math.round(p.x * S) - cam, y = Math.round(p.y * S);
       switch (p.kind) {
-        case 'ember': wr(p.x, p.y, 1, 1, k > 0.5 ? '#f8b800' : '#f83800'); break;
-        case 'spark': wr(p.x, p.y, 1, 1, p.color || W); break;
-        case 'sweat': wr(p.x, p.y, 1, 1, '#3cbcfc'); break;
-        case 'puff': wr(p.x - 1, p.y - 1, 2, 2, W); break;
-        case 'smoke': { const rr = p.r * (1 + p.t); wr(p.x - rr, p.y - rr, rr * 2, rr * 2, `rgba(60,60,60,${0.55 * k})`); break; }
-        case 'streak': wr(p.x, p.y, p.len * (this.gust.state === 'gust' ? 2 : 1), 1, `rgba(252,252,252,${0.45 * k})`); break;
-        case 'rain': wr(p.x, p.y, 1, 3, 'rgba(160,200,252,0.7)'); break;
+        case 'ember': R(g, x, y, 1, 1, k > 0.5 ? '#ffd040' : '#f04a0c'); if (k > 0.7) R(g, x, y + 1, 1, 1, '#c81e08'); break;
+        case 'spark': R(g, x, y, 2, 2, p.color || WHITE); break;
+        case 'sweat': R(g, x, y, 1, 2, '#3cbcfc'); break;
+        case 'puff': drawPuff(g, x, y, 2 + (1 - k) * 2, this.lk.dust, null, 0.6); break;
+        case 'smoke': {
+          g.globalAlpha = 0.7 * k;
+          drawPuff(g, x, y, p.r * (1 + p.t) * S, '#3a3436', '#5a5050', 0.5);
+          g.globalAlpha = 1; break;
+        }
+        case 'streak': g.globalAlpha = 0.45 * k; R(g, x, y, p.len * S * (gust ? 2 : 1), 1, WHITE); g.globalAlpha = 1; break;
+        case 'rain': g.globalAlpha = 0.75; R(g, x, y, 1, 3, '#a0c8fc'); R(g, x - 1, y + 3, 1, 2, '#a0c8fc'); g.globalAlpha = 1; break;
       }
     }
   }
 
-  _drawOverlay(c, r, T0) {
+  _drawOverlay(g, T0) {
     if (this.mode === 'fire') {
-      c.fillStyle = 'rgba(80,0,0,0.12)'; c.fillRect(0, 0, LW * S, LH * S);
+      g.fillStyle = 'rgba(80,0,0,0.12)'; g.fillRect(0, 0, CW, CH);
+      g.globalAlpha = 0.3;
       for (let i = 0; i < 4; i++) {                       // drifting smoke banks
-        const x = ((i * 50 - T0 * 12) % 220 + 220) % 220 - 40;
-        r(x, 30 + i * 9, 40, 8, 'rgba(30,20,20,0.25)');
+        const x = ((i * 100 - T0 * 24) % 440 + 440) % 440 - 80;
+        drawPuff(g, x, 64 + i * 18, 18, '#1e1214', null, 0.6);
+        drawPuff(g, x + 22, 70 + i * 18, 14, '#1e1214', null, 0.6);
       }
+      g.globalAlpha = 1;
     }
     if (this.mode === 'wind') {
-      c.fillStyle = 'rgba(10,20,40,0.15)'; c.fillRect(0, 0, LW * S, LH * S);
-      if (this.stormy && Math.floor(T0 * 3) % 23 === 0) { c.fillStyle = 'rgba(252,252,252,0.35)'; c.fillRect(0, 0, LW * S, LH * S); }
+      g.fillStyle = 'rgba(10,20,40,0.15)'; g.fillRect(0, 0, CW, CH);
+      if (this.stormy && this._lightning(T0)) { g.fillStyle = 'rgba(252,252,252,0.35)'; g.fillRect(0, 0, CW, CH); }
     }
-    if (this.mode === 'heat') { c.fillStyle = 'rgba(252,224,168,0.10)'; c.fillRect(0, 0, LW * S, LH * S); }
+    if (this.mode === 'heat') {
+      g.fillStyle = this.look === 'dust' ? 'rgba(200,150,90,0.16)' : 'rgba(252,224,168,0.10)';
+      g.fillRect(0, 0, CW, CH);
+    }
   }
 
-  _drawHUD(r, T0) {
-    const P = this.pal;
-    r(0, 0, LW, HUD_H, K);
-    r(0, HUD_H, LW, 1, P.hud);
-    this._text(r, this.label, 3, 3, P.hud, 1, 'left', false);
-    this._text(r, 'FAM', 58, 3, W, 1, 'left', false);                 // family health: ten blocks
-    const col = this.health > 50 ? '#00a800' : this.health > 25 ? '#f8b800' : '#d82800';
-    for (let i = 0; i < 10; i++) r(71 + i * 4, 3, 3, 5, this.health > i * 10 ? col : '#3c3c3c');
-    if (this.mode === 'heat') {                                       // stamina
+  _drawChevrons(g, dir, cx, y, color) {
+    const rows = this.art.chevron[dir < 0 ? 0 : 1];
+    for (let k = 0; k < 3; k++) {
+      const x = cx + k * 6;
+      for (const [d, col] of [[1, INK], [0, color]]) {
+        for (let r = 0; r < rows.length; r++) for (let c = 0; c < 4; c++) if (rows[r][c] === '#') R(g, x + c + d, y + r + d, 1, 1, col);
+      }
+    }
+  }
+
+  _drawHUD(g, T0) {
+    const A = this.art, lk = this.lk;
+    plate(g, 0, 0, CW, HUD_PX, { fill: '#120e1a' });
+    R(g, 0, HUD_PX, CW, 1, INK);
+    text(g, this.label, 5, 7, { color: lk.hud, shadow: INK });
+    const hx = 88;                                                      // family health
+    draw(g, A.heart, hx, 7);
+    const hcol = this.health > 50 ? ['#3ad04a', '#a8f8a0'] : this.health > 25 ? ['#f8c020', '#fff0a0'] : ['#e8402a', '#ffa090'];
+    meter(g, hx + 10, 6, this.health / 100, { col: hcol[0], hi: hcol[1] });
+    if (this.mode === 'heat') {                                         // stamina
       const low = this.stamina < 12 && Math.floor(T0 * 8) % 2;
-      r(113, 4, 20, 3, '#3c3c3c'); r(113, 4, Math.round(20 * this.stamina / 100), 3, low ? '#d82800' : '#3cbcfc');
+      draw(g, A.drop, 172, 6);
+      bar(g, 181, 7, 44, 7, this.stamina / 100, low ? '#e8402a' : '#3cbcfc', low ? '#ffa090' : '#c8f0ff');
     }
     const prog = clamp((this.leader.x - this.spawn.x) / (this.doorX - this.spawn.x), 0, 1);  // progress to shed
-    r(137, 5, 16, 1, '#7c7c7c');
-    r(137 + Math.round(prog * 14), 3, 2, 5, W);
-    r(155, 3, 4, 6, '#a85808'); r(154, 2, 6, 2, '#bcbcbc');
-    if (this.mode === 'wind' && this.gust.state !== 'calm' && (this.gust.state === 'gust' || Math.floor(T0 * 10) % 2)) {
-      const arrows = this.gust.dir < 0 ? '<<<' : '>>>';
-      this._text(r, `${this.gust.state === 'warn' ? 'GUST!' : 'BRACE!'} ${arrows}`, LW / 2, 14, W, 1, 'center');
+    const px0 = 236, pw = 60;
+    R(g, px0, 9, pw, 3, INK); R(g, px0 + 1, 10, pw - 2, 1, '#5a5468');
+    for (let x = px0 + 4; x < px0 + pw; x += 8) R(g, x, 10, 2, 1, '#8a84a0');
+    const mx = px0 + Math.round(prog * (pw - 6));
+    R(g, mx, 5, 6, 10, INK); R(g, mx + 1, 6, 4, 3, SKINS[1]); R(g, mx + 1, 9, 4, 5, SHIRTS[0]);   // leader colors
+    draw(g, A.shedIcon, 302, 6);
+    if (this.phase === 'play' && this.mode === 'wind' && this.gust.state !== 'calm' && (this.gust.state === 'gust' || Math.floor(T0 * 10) % 2)) {
+      const warn = this.gust.state === 'warn';
+      const word = warn ? 'GUST!' : 'BRACE!';
+      const tw = word.length * 6 - 1, total = tw + 6 + 18;
+      const x0 = Math.round(CW / 2 - total / 2);
+      label(g, word, x0, 27, warn ? '#ffe060' : WHITE);
+      this._drawChevrons(g, this.gust.dir, x0 + tw + 6, 28, warn ? '#ffe060' : '#9cc8fc');
     }
-    if (this.mode === 'heat' && this.stamina < 12 && this.phase === 'play') this._text(r, 'EXHAUSTED! FIND SHADE', LW / 2, 14, '#f87858', 1, 'center');
-    if (this._banner && this._banner.t > 0) this._text(r, this._banner.text, LW / 2, 22, this._banner.color, 1, 'center');
+    if (this.mode === 'heat' && this.stamina < 12 && this.phase === 'play') label(g, 'EXHAUSTED! FIND SHADE', CW / 2, 27, '#ff8a6a', 'center');
+    if (this._banner && this._banner.t > 0) {
+      drawLogo(g, this._banner.text, CW / 2, 38, 2, this._banner.color === '#3cbcfc' ? BLUE : RED);
+    }
   }
 
-  _drawButtons(r) {
+  _drawButtons(g) {
     const held = new Set(this.touches.values());
-    const btn = (x, label, on) => {
-      r(x, LH - 22, 20, 20, on ? 'rgba(252,252,252,0.35)' : 'rgba(0,0,0,0.35)');
-      r(x, LH - 22, 20, 1, 'rgba(252,252,252,0.6)');
-      this._text(r, label, x + 10, LH - 15, W, 1, 'center');
-    };
-    btn(2, '<', held.has('l')); btn(26, '>', held.has('r'));
-    btn(LW - 46, 'DN', held.has('d')); btn(LW - 22, 'UP', held.has('j'));
+    const y = (LH - 22) * S, s = 20 * S;
+    touchButton(g, 2 * S, y, s, s, 'left', held.has('l'));
+    touchButton(g, 26 * S, y, s, s, 'right', held.has('r'));
+    touchButton(g, (LW - 46) * S, y, s, s, 'down', held.has('d'));
+    touchButton(g, (LW - 22) * S, y, s, s, 'up', held.has('j'));
   }
 
-  _drawIntro(r, T0) {
-    r(0, HUD_H + 1, LW, LH - HUD_H - 1, K);
-    this._text(r, 'RUN FOR THE SHED!', LW / 2, 16, '#f8b800', 2, 'center');
-    this._text(r, this.label, LW / 2, 31, this.pal.hud, 1, 'center');
-    this._text(r, this.cfg.hint, LW / 2, 39, W, 1, 'center');
+  _drawIntro(g, T0) {
+    const k = ease(this.phaseT / 0.35);
+    g.globalAlpha = k;
+    g.drawImage(this.art.veil, 0, HUD_PX);
+    g.globalAlpha = 1;
+    const drop = (d) => Math.round((1 - ease((this.phaseT - d) / 0.45)) * -60);
+    g.save();
+    g.beginPath(); g.rect(0, HUD_PX + 1, CW, CH - HUD_PX - 1); g.clip();      // logos drop in from under the HUD
+    drawLogo(g, 'RUN FOR', CW / 2, 24 + drop(0), 3, GOLD);
+    drawLogo(g, 'THE SHED!', CW / 2, 49 + drop(0.12), 3, GOLD);
+    g.restore();
+    if (this.phaseT < 0.35) return;
+    label(g, this.label, CW / 2, 79, this.lk.hud, 'center');
+    label(g, this.cfg.hint, CW / 2, 89, WHITE, 'center');
     const perkNames = {
       firstAid: 'FIRST AID', burnMult: 'GAS MASKS', staminaMult: 'INSULATION',
       drinks: `${this.perks.drinks} WATER`, pushMult: 'TARP BRACE', earlyWarning: 'RADIO',
     };
-    const perks = Object.keys(this.perks).map(k => perkNames[k]).filter(Boolean);
-    const lines = perks.length ? wrap('SUPPLIES: ' + perks.join(', '), 38) : ['NO SUPPLIES FOR THIS ONE'];
-    lines.slice(0, 2).forEach((ln, i) => this._text(r, ln, LW / 2, 48 + i * 7, perks.length ? '#58d854' : '#7c7c7c', 1, 'center'));
-    this._text(r, 'ARROWS MOVE, SPACE JUMP, DOWN CROUCH', LW / 2, 64, '#bcbcbc', 1, 'center');
-    const n = Math.ceil(INTRO_SECONDS - this.phaseT - 0.5);
-    this._text(r, n > 0 ? String(n) : 'GO!', LW / 2, 73, n > 0 ? W : '#58d854', 2, 'center');
-    for (let i = 0; i < this.family.length; i++) {                      // family preview, jogging in place
-      this._drawSprite(r, SPR[Math.floor(T0 * 4 + i) % 2 ? 'walkA' : 'walkB'], 6 + i * 9, LH - 14, 1, this.family[i], false);
-    }
+    const perks = Object.keys(this.perks).map(p => perkNames[p]).filter(Boolean);
+    const lines = perks.length ? wrapText('SUPPLIES: ' + perks.join(', '), 48) : ['NO SUPPLIES FOR THIS ONE'];
+    lines.slice(0, 2).forEach((ln, i) => label(g, ln, CW / 2, 100 + i * 9, perks.length ? '#7ae07a' : '#8a8498', 'center'));
+    label(g, this.showTouch ? 'BUTTONS: MOVE - JUMP - CROUCH' : 'ARROWS MOVE - SPACE JUMP - DOWN CROUCH', CW / 2, 119, '#c8c4d8', 'center');
+    countdown(g, INTRO_SECONDS - this.phaseT - 0.5, CW / 2 + 70, 136);
+    this._drawFamily(g, Math.round(this.camX * S), T0);                // the family, ready to run
   }
 
-  _drawEnd(r) {
-    const k = Math.min(1, this.phaseT / 0.4);
+  _drawEnd(g) {
     const ok = this.outcome !== 'failed';
-    // Banner sits up top so the shed (door slam, rattling walls) stays in view
-    r(0, HUD_H + 1, LW, 22, ok ? `rgba(0,40,0,${0.75 * k})` : `rgba(60,0,0,${0.75 * k})`);
-    r(0, HUD_H + 22, LW, 1, K);
+    const k = Math.min(1, this.phaseT / 0.4);
+    g.globalAlpha = 0.55 * k;
+    g.drawImage(this.art.veil, 0, 0, CW, 52, 0, HUD_PX + 1, CW, 52);
+    g.globalAlpha = 1;
     const title = { survived: 'SHELTERED!', barely: 'MADE IT... BARELY', failed: 'OVERWHELMED' }[this.outcome];
-    this._text(r, title, LW / 2, HUD_H + 3, ok ? '#58d854' : '#f87858', 2, 'center');
-    this._text(r, ok ? 'THE SHED CREAKS - BUT IT HOLDS.' : 'THE FAMILY COLLAPSES SHORT OF COVER.', LW / 2, HUD_H + 15, W, 1, 'center');
+    const bands = this.outcome === 'survived' ? GREEN : this.outcome === 'barely' ? GOLD : RED;
+    const t = clamp(this.phaseT / 0.55, 0, 1), c1 = 1.70158;
+    const kb = 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);     // ease-out-back
+    const big = title.length <= 12;
+    drawLogo(g, title, CW / 2, Math.round(lerp(-30, HUD_PX + (big ? 5 : 10), kb)), big ? 3 : 2, bands);
+    if (this.phaseT > 0.35) {
+      label(g, ok ? 'THE SHED CREAKS - BUT IT HOLDS.' : 'THE FAMILY COLLAPSES SHORT OF COVER.', CW / 2, HUD_PX + 36, WHITE, 'center');
+    }
   }
 }

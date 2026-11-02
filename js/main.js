@@ -7,6 +7,7 @@ import { Logger } from '../ui/logger.js';
 import { MapOverlay } from '../ui/mapOverlay.js';
 import { ShedDash, shedModeFor } from '../ui/shedDash.js';
 import { challengeOdds, minigamePerks, consumeMinigameUses } from './supplies.js';
+import { killFamilyMember } from './events.js';
 
 const MINIGAME_KIND = { SHELTER: 'shed', FROGGER: 'frogger', BARRICADE: 'barricade' };
 import { BarricadeRunner } from '../ui/barricadeRunner.js';
@@ -269,8 +270,8 @@ class GameController {
       // Frogger uses the canvas directly
       canvasEl.style.display = '';
       miniGameEl.style.display = 'none';
-      this.logger.log('FORD THE RIVER! Ride the logs — don\'t fall in!', 'event');
-      this.froggerDash.start(progress, callback, this.currentWeather, perks);
+      this.logger.log('FORD THE RIVER! One at a time — the river can take each of you.', 'event');
+      this.froggerDash.start(progress, callback, this.currentWeather, perks, { family: this.game.family });
     } else if (type === 'BARRICADE') {
       // Barricade draws pixel art on the shared canvas, like Frogger
       canvasEl.style.display = '';
@@ -289,6 +290,11 @@ class GameController {
   _onMiniGameComplete(result) {
     // Spend supplies the mini-game actually used
     consumeMinigameUses(this.game, result.used);
+    // Family members a mini-game lost (Ford the River) die through the event death path
+    const deaths = (result.lost || [])
+      .map(i => killFamilyMember(this.game, this.game.family[i], this.game.currentEvent?.perilType || 'flood'))
+      .filter(Boolean);
+    if (deaths.length) result.death = { ...deaths[0], message: deaths.map(d => d.message).join(' ') };
     // Restore canvas display (in case an ASCII mini-game was showing the pre element)
     const canvasEl = document.getElementById('asciiDisplay');
     const miniGameEl = document.getElementById('miniGameDisplay');
@@ -315,6 +321,10 @@ class GameController {
     // Log outcome
     this.logger.log(result.narrative, result.survived ? 'success' : 'danger');
     this.game.addJournal(`Day ${this.game.day}: ${result.narrative}`);
+    for (const d of deaths) {
+      this.game.addJournal(`Day ${this.game.day}: ${d.message}`);
+      this.logger.log(`\u2620\uFE0F ${d.message}`, 'danger');
+    }
 
     // Show result in event panel (reuse existing result card UI)
     // Game over from mini-game damage gets a final card with no Continue button

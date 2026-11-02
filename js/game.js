@@ -241,6 +241,7 @@ export class Game {
 
   checkGameOver() {
     const r = this.resources;
+    if (this.family.length && !this.family.some(m => m.alive)) return 'The whole family is lost.';
     if (r.fuel <= 0) return 'Out of fuel. Stranded on the road.';
     if (r.water <= 0) return 'No water left. Dehydration takes hold.';
     if (r.food <= 0) return 'Starvation. The family can go no further.';

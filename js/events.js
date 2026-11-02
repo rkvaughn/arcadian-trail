@@ -242,6 +242,16 @@ function checkEventDeath(gameState, effects, perilType) {
   if (nonLeaders.length === 0) return null;
 
   const victim = nonLeaders[Math.floor(Math.random() * nonLeaders.length)];
+  return killFamilyMember(gameState, victim, perilType);
+}
+
+/**
+ * Kill one family member from an event or mini-game: mark them dead, take the
+ * morale hit and build the death message for the journal and result card.
+ * Returns { name, cause, message, isLeader }, or null if they were already dead.
+ */
+export function killFamilyMember(gameState, victim, perilType) {
+  if (!victim || !victim.alive) return null;
   victim.alive = false;
   victim.health = 0;
 
@@ -251,5 +261,5 @@ function checkEventDeath(gameState, effects, perilType) {
   const messages = EVENT_DEATH_CAUSES[perilType] || EVENT_DEATH_CAUSES.health;
   const message = `${victim.name} ${messages[Math.floor(Math.random() * messages.length)]}`;
 
-  return { name: victim.name, cause: perilType, message, isLeader: false };
+  return { name: victim.name, cause: perilType, message, isLeader: !!victim.isLeader };
 }

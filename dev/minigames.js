@@ -5,7 +5,7 @@ import { FroggerDash } from '../ui/froggerDash.js';
 import { BarricadeRunner } from '../ui/barricadeRunner.js';
 
 const FAMILY = [
-  { name: 'Walker', age: 38, alive: true }, { name: 'Sam', age: 36, alive: true },
+  { name: 'Walker', age: 38, alive: true, isLeader: true }, { name: 'Sam', age: 36, alive: true },
   { name: 'Eli', age: 12, alive: true }, { name: 'Rowan', age: 8, alive: true },
 ];
 let q = new URLSearchParams(location.search);
@@ -46,7 +46,11 @@ function start() {
   game = games[kind]();
   window.__mg = game;
   if (kind === 'shed') game.start(progress, done, { peril: q.get('peril') || 'wind', variant: q.get('variant') || null, family: FAMILY, perks: perks() });
-  else if (kind === 'frogger') game.start(progress, done, q.get('flood') ? { icon: 'flood' } : null, perks());
+  else if (kind === 'frogger') {
+    // &size=N trims the family (fresh copies each run; the game itself kills members in main.js)
+    const fam = FAMILY.slice(0, Number(q.get('size')) || FAMILY.length).map(m => ({ ...m }));
+    game.start(progress, done, q.get('flood') ? { icon: 'flood' } : null, perks(), { family: fam });
+  }
   else game.start(progress, done, perks());
   document.getElementById('q').textContent = location.search;
 }

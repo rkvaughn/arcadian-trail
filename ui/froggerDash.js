@@ -1,35 +1,43 @@
 /**
- * froggerDash.js — River Crossing mini-game (Frogger-style)
+ * froggerDash.js — Ford the River mini-game
  *
- * Triggered when the player chooses to ford a swollen river.
- * Player hops across floating logs and debris to reach the far bank.
- * Open water drains health; logs carry the player with the current.
+ * Triggered when the player chooses to ford a swollen river. The family
+ * crosses one member at a time, hopping across floating logs and debris to
+ * reach the far bank. Open water drains the wader's health; logs carry them
+ * with the current.
+ *
+ * Every living family member is one try. If the river takes the wader (health
+ * runs out, they drift off-screen or time runs out), that member is lost and
+ * the next one steps up. The first to reach the far bank ties off a line and
+ * the rest follow. The members lost are returned in `result.lost` (indices into
+ * the family array) and main.js kills them through the event death path
+ * (js/events.js killFamilyMember).
  *
  * Game logic runs in an 80×45 logical grid (x in logical px, y as rows); the
  * art draws at the canvas's native 320×180 (4 art px per logical px across),
  * in the cut-scene style (ui/cutscenes/kit.js). Row heights on screen are
- * visual only — collisions depend on row index and x, as before.
+ * visual only — collisions depend on row index and x.
  *
  * Public interface:
  *   new FroggerDash(canvasEl, infoBarEl)
- *   .start(difficulty, onComplete, weatherData, perks)
+ *   .start(difficulty, onComplete, weatherData, perks, { family })
  *   .stop()
  */
 
 import { CardRunner, riverCard } from './cutscenes/screensArt.js';
 import {
-  W, H, R, rng, ditherBands, ditherFill, ridge, strip, draw, sprite, painted, silhouette, text, stepParticles,
+  W, H, R, rng, ditherBands, ditherFill, ridge, strip, draw, sprite, painted, silhouette, text, stepParticles, ease,
 } from './cutscenes/kit.js';
 import {
-  INK, familySprites, drawFamily, pineSprite, roundTreeSprite, houseSprite, cloudSprite,
+  INK, pineSprite, roundTreeSprite, houseSprite, cloudSprite, SHIRTS, SKINS,
 } from './cutscenes/sprites.js';
 import {
   grassStrip, flowerField, drawFlowers, turbine, plate, meter, bar, touchButton, pointerToArt, touchFirst,
-  drawLogo, countdown, label, wrapText, GOLD,
+  drawLogo, countdown, label, wrapText, GOLD, BLUE,
 } from './minigames/art.js';
+import { runnerSprites } from './minigames/shedArt.js';
 
 const PW    = 80;   // logical width  (game logic units)
-const PH    = 45;   // logical height (kept for reference; rows are what matter)
 const SX    = W / PW;   // art px per logical px (4)
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -47,10 +55,18 @@ const LANE_DEFS = [
   { dir:  1, baseSpeed: 0.50, logW: 11, count: 3, color: '#7a4e12', bark: '#5a3008' },
 ];
 
-const GAME_DURATION      = 35;   // seconds
+const GAME_DURATION      = 35;   // seconds per try
 const WATER_DAMAGE_RATE  = 35;   // health/sec when in open water
-const PLAYER_W           = 5;
 const FRAME_RATE         = 60;   // log speeds above are px per 60 Hz frame
+const START_X            = 38;   // where each wader steps off the near bank (logical px)
+
+// GAMEPLAY TUNING (not climate data): the wader's hitbox matches the 12-px-wide
+// family sprite (3 logical px; the old mini wagon was 5).
+const PLAYER_W           = 3;
+// GAMEPLAY TUNING (not climate data): pacing between tries, in seconds.
+const LOST_PAUSE         = 2.4;  // show who the river took
+const NEXT_PAUSE         = 1.6;  // the next family member walks up to the water
+const END_PAUSE          = 2;    // final card before handing back to the game
 
 // ── Screen layout (art px; visual only) ──────────────────────────────────────
 const HUD_H     = 13;
@@ -59,8 +75,11 @@ const RIVER_Y   = 54;            // first lane top
 const LANE_H    = 20;
 const NEAR_Y    = RIVER_Y + LANE_H * 5;   // 154: near bank
 const laneTop = (row) => RIVER_Y + (row - 1) * LANE_H;
-// Y of the car's wheel line for each row when standing/riding
-const ROW_BOTTOM = [52, ...RIVER_ROWS.map(r => laneTop(r) + 10), 173];
+// Y of the wader's feet for each row (on the far bank, on a log, on the near bank)
+const FEET = [52, ...RIVER_ROWS.map(r => laneTop(r) + 6), 172];
+const QUEUE_X = 84;    // art px: where the waiting family stands on the near bank
+const QUEUE_GAP = 12;
+const HOP_T = 0.18;     // seconds of hop / step animation (visual only)
 
 // Touch buttons (art px)
 const BTN = {
@@ -70,23 +89,11 @@ const BTN = {
 
 // ── Sprites ──────────────────────────────────────────────────────────────────
 
-// Mini station wagon sized to the 5×4 logical hitbox (18×10 art + outline = 20 px).
-const MINI_WAGON = [
-  '...sSss.sSs.......',
-  '..rrrrrrrrrrr.....',
-  '..bBBBBBBBBBBb....',
-  '.bBWWWBWWWBWwWb...',
-  '.BBWwWBWwWBWWWBBBb',
-  'TBBBBBBBBBBBBBBBBL',
-  'TPPPPPPPPPPPPBBBBL',
-  'bppppppppppppBBBBB',
-  'CCKKKCCCCCCCCKKKCC',
-  '..KK.........KK...',
-];
-const WAGON_PAL = {
-  B: '#3a6ad0', b: '#2a4a98', W: '#9ad4f0', w: '#e8f8ff', T: '#e83828', L: '#ffe680', C: '#c8ccd4',
-  K: '#1a1418', P: '#a8703a', p: '#7a4c22', r: '#3a3438', s: '#c89a5a', S: '#a87a40',
-};
+const isChild = (m) => typeof m.age === 'number' && m.age < 13;   // same cut-off as the cut-scene sprites
+/** Name as the 5×7 font can draw it. */
+const shortName = (m) => String(m.name || 'YOU').toUpperCase().replace(/[^A-Z0-9 .'-]/g, '').trim().slice(0, 10) || 'YOU';
+/** "A", "A and B", "A, B and C". */
+const nameList = (names) => names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
 const CATTAIL = ['.b..', '.b.b', '.B.b', '.BgB', 'gBgB', 'g.gg', 'g.g.', 'gg..'];
 const CATTAIL_PAL = { b: '#6a3a1a', B: '#7a4a24', g: '#4a8a3a' };
@@ -169,7 +176,7 @@ export class FroggerDash {
     this._endScheduled = false;
   }
 
-  start(difficulty, onComplete, weatherData, perks = {}) {
+  start(difficulty, onComplete, weatherData, perks = {}, opts = {}) {
     this.onComplete  = onComplete;
     this.perks       = perks || {};   // supply perks (js/supplies.js minigamePerks)
     this.used        = {};            // supplies consumed this run
@@ -199,18 +206,22 @@ export class FroggerDash {
       };
     });
 
-    // Player
-    this.player = {
-      row:     6,         // start at near bank
-      x:       38,        // horizontal position (left edge of sprite)
-      health:  100,
-      inWater: false,
-      riding:  null,      // { laneIdx, log } when on a log
-    };
+    // Family: every living member gets one try. Adults go before children and
+    // the leader goes last (the game's rule: leaders die last).
+    const fam = opts.family && opts.family.length ? opts.family : [{ name: 'You', alive: true, isLeader: true }];
+    this.family = fam;
+    let alive = fam.map((m, i) => ({ m, i })).filter(e => e.m.alive !== false);
+    if (!alive.length) alive = [{ m: { name: 'You' }, i: -1 }];
+    alive.forEach((e, k) => { e.k = k; });   // sprite colors follow order among the living, as in the cut scenes
+    this.runners = runnerSprites(alive.map(e => ({ small: isChild(e.m) })));
+    this.queue = [...alive].sort((a, b) =>
+      (!!a.m.isLeader - !!b.m.isLeader) || (isChild(a.m) - isChild(b.m)) || ((b.m.age || 0) - (a.m.age || 0)));
+    this.tryIdx = 0;
+    this.lost = [];                   // family indices the river took
     this.face = 1;
+    this._newTry();
 
-    this.timer       = GAME_DURATION;
-    this.state       = 'countdown';   // countdown → playing → won/failed
+    this.state       = 'countdown';   // countdown → playing → (lost → next → playing)… → won/failed
     this.countdown   = 3;
     this.frameCount  = 0;
     this.lastTime    = null;
@@ -277,18 +288,18 @@ export class FroggerDash {
   _act(act) {
     const { player } = this;
     if (act === 'u') {
-      if (player.row > 0) { player.row--; player.riding = null; }
+      if (player.row > 0) { player.row--; player.riding = null; this.hopT = HOP_T; }
     } else if (act === 'd') {
-      if (player.row < 6) { player.row++; player.riding = null; }
+      if (player.row < 6) { player.row++; player.riding = null; this.hopT = HOP_T; }
     } else if (act === 'l') {
-      player.x = Math.max(1, player.x - 5); this.face = -1;
+      player.x = Math.max(1, player.x - 5); this.face = -1; this.walkT = HOP_T;
     } else if (act === 'r') {
-      player.x = Math.min(PW - PLAYER_W - 1, player.x + 5); this.face = 1;
+      player.x = Math.min(PW - PLAYER_W - 1, player.x + 5); this.face = 1; this.walkT = HOP_T;
     }
   }
 
-  // Buttons in the bottom corners; elsewhere, tap above/below the car to hop
-  // and beside it to shift.
+  // Buttons in the bottom corners; elsewhere, tap above/below the wader to hop
+  // and beside them to shift.
   _onPointer(e) {
     if (!this.running) return;
     if (e.pointerType && e.pointerType !== 'mouse') this.showTouch = true;
@@ -302,7 +313,7 @@ export class FroggerDash {
       }
     }
     if (!act) {
-      const cy = ROW_BOTTOM[this.player.row] - 6;
+      const cy = FEET[this.player.row] - 10;
       if (p.y < cy - 10) act = 'u';
       else if (p.y > cy + 10) act = 'd';
       else act = p.x < (this.player.x + PLAYER_W / 2) * SX ? 'l' : 'r';
@@ -326,19 +337,60 @@ export class FroggerDash {
     this._animate(dt);
     this._draw();
 
-    if (this.state === 'playing' || this.state === 'countdown') {
-      this._rafId = requestAnimationFrame((t) => this._loop(t));
-    } else if (!this._endScheduled) {
-      // Show result card for 2 s then hand back to game
+    if ((this.state === 'won' || this.state === 'failed') && !this._endScheduled) {
+      // Show the result card, then hand back to the game
       this._endScheduled = true;
       setTimeout(() => {
         this.stop();
         this.onComplete(this._buildResult());
-      }, 2000);
+      }, END_PAUSE * 1000);
     }
+    // The win card runs on its own; everything else keeps drawing here
+    if (this.running && this.state !== 'won') this._rafId = requestAnimationFrame((t) => this._loop(t));
   }
 
   // ── Update ─────────────────────────────────────────────────────────────────
+
+  /** Put the next family member on the near bank with a fresh timer and health. */
+  _newTry() {
+    this.cur = this.queue[this.tryIdx];
+    this.player = {
+      row:     6,         // start at near bank
+      x:       START_X,   // horizontal position (left edge of the hitbox)
+      health:  100,
+      inWater: false,
+      riding:  null,      // { laneIdx, log } when on a log
+    };
+    this.timer = GAME_DURATION;
+    this.hopT = 0;
+    this.walkT = 0;
+  }
+
+  /** The river takes the current wader: they're lost, and the next one tries. */
+  _loseWader(cause) {
+    const p = this.player;
+    if (!RIVER_ROWS.includes(p.row)) p.row = p.row === 0 ? 1 : 5;   // time ran out on a bank: the water rises over them
+    this.lost.push(this.cur.i);
+    this.lostCause = cause;
+    this.lostT = LOST_PAUSE;
+    this.driftDir = this.lanes[p.row - 1].def.dir;
+    this.driftSpeed = this.lanes[p.row - 1].logs[0].speed;
+    p.riding = null;
+    p.inWater = true;
+    this._splash(16);
+    this.state = 'lost';
+  }
+
+  _moveLogs(step) {
+    this.lanes.forEach(({ def, logs }) => {
+      logs.forEach((log) => {
+        log.x += def.dir * log.speed * step;
+        // Wrap with a small buffer so logs don't pop into view
+        if (def.dir ===  1 && log.x >  PW)              log.x = -log.width;
+        if (def.dir === -1 && log.x + log.width < 0)    log.x =  PW;
+      });
+    });
+  }
 
   _update(dt) {
     // Countdown phase
@@ -348,24 +400,37 @@ export class FroggerDash {
       return;
     }
 
-    if (this.state !== 'playing') return;
-
     const { player, lanes } = this;
     const step = FRAME_RATE * dt;   // 60 Hz frames elapsed
 
+    // Between tries: the lost wader drifts off, then the next one walks up
+    if (this.state === 'lost') {
+      this._moveLogs(step);
+      player.x += this.driftDir * this.driftSpeed * step;
+      this.lostT -= dt;
+      if (this.lostT <= 0) {
+        this.tryIdx++;
+        if (this.tryIdx >= this.queue.length) { this.state = 'failed'; return; }
+        this._newTry();
+        this.nextT = NEXT_PAUSE;
+        this.state = 'next';
+      }
+      return;
+    }
+    if (this.state === 'next') {
+      this._moveLogs(step);
+      this.nextT -= dt;
+      if (this.nextT <= 0) this.state = 'playing';
+      return;
+    }
+
+    if (this.state !== 'playing') return;
+
     // Timer
     this.timer -= dt;
-    if (this.timer <= 0) { this.state = 'failed'; return; }
+    if (this.timer <= 0) { this._loseWader('time'); return; }
 
-    // Move all logs
-    lanes.forEach(({ def, logs }) => {
-      logs.forEach((log) => {
-        log.x += def.dir * log.speed * step;
-        // Wrap with a small buffer so logs don't pop into view
-        if (def.dir ===  1 && log.x >  PW)              log.x = -log.width;
-        if (def.dir === -1 && log.x + log.width < 0)    log.x =  PW;
-      });
-    });
+    this._moveLogs(step);
 
     // If riding a log, drift with it
     if (player.riding) {
@@ -375,8 +440,8 @@ export class FroggerDash {
 
       // Drifted off-screen = swept away
       if (player.x < -PLAYER_W || player.x > PW) {
-        player.health = 0;
-        this.state = 'failed';
+        player.x = Math.max(-PLAYER_W, Math.min(PW, player.x));
+        this._loseWader('swept');
         return;
       }
     }
@@ -409,13 +474,13 @@ export class FroggerDash {
       if (player.inWater) {
         if (!wasInWater) this._splash(14);
         player.health = Math.max(0, player.health - WATER_DAMAGE_RATE * (this.perks.waterMult || 1) * dt);
-        // First aid kit: one emergency heal per crossing
+        // First aid kit: one emergency heal per crossing (whole family)
         if (this.perks.firstAid && !this.used.first_aid && player.health > 0 && player.health < 30) {
           player.health = Math.min(100, player.health + 30);
           this.used.first_aid = 1;
           this.aidT = 1.4;
         }
-        if (player.health <= 0) { this.state = 'failed'; }
+        if (player.health <= 0) this._loseWader('drowned');
       }
     } else {
       // On a bank — safe
@@ -429,11 +494,14 @@ export class FroggerDash {
   _animate(dt) {
     this.t += dt;
     this.aidT = Math.max(0, this.aidT - dt);
+    this.hopT = Math.max(0, this.hopT - dt);
+    this.walkT = Math.max(0, this.walkT - dt);
     if (this.pressed) { this.pressed.t -= dt; if (this.pressed.t <= 0) this.pressed = null; }
     for (const ln of this.lanes) ln.scroll += ln.def.dir * ln.logs[0].speed * FRAME_RATE * SX * dt;
 
     const p = this.player;
-    if (p.inWater && this.state === 'playing' && Math.random() < dt * 24) this._splash(1);
+    const thrashing = this.state === 'playing' || (this.state === 'lost' && this.lostT > LOST_PAUSE * 0.4);
+    if (p.inWater && thrashing && Math.random() < dt * 24) this._splash(1);
     stepParticles(this.parts, dt);
 
     if (this.flood) {
@@ -446,7 +514,7 @@ export class FroggerDash {
   }
 
   _splash(n) {
-    const cx = (this.player.x + PLAYER_W / 2) * SX, y = ROW_BOTTOM[this.player.row];
+    const cx = (this.player.x + PLAYER_W / 2) * SX, y = FEET[this.player.row] + 4;
     for (let i = 0; i < n; i++) {
       this.parts.push({
         x: cx + (Math.random() - 0.5) * 18, y: y - 2, vx: (Math.random() - 0.5) * 50,
@@ -507,9 +575,7 @@ export class FroggerDash {
       for (const x of [118, 214, 300]) draw(g, rock, x, 2);
     });
     A.reed = reed;
-    A.wagon = sprite(MINI_WAGON, WAGON_PAL, { outline: INK });
-    A.hurt = silhouette(A.wagon, '#ff5a4a');
-    A.fam = familySprites(null);
+    A.hurt = this.runners.map(f => ({ stand: silhouette(f.stand, '#ff5a4a'), jump: silhouette(f.jump, '#ff5a4a') }));
     A.farFlowers = flowerField(21, 16, 4, W - 4, BANK_TOP + 6, RIVER_Y - 5);
     A.nearFlowers = flowerField(22, 14, 4, W - 4, NEAR_Y + 12, H - 2);
     A.clouds = [{ x: 20, y: 16, big: true, v: 4 }, { x: 150, y: 22, big: false, v: 6 }, { x: 240, y: 14, big: true, v: 3 }];
@@ -524,16 +590,14 @@ export class FroggerDash {
   _draw() {
     const { ctx: g, player, lanes, art: A, t } = this;
 
-    // Win / fail: hand the canvas to the pixel-art scene card
-    if (this.state === 'won' || this.state === 'failed') {
+    // Made it: hand the canvas to the pixel-art scene card
+    if (this.state === 'won') {
       if (!this._card) {
-        const won = this.state === 'won';
         this._card = new CardRunner(this.canvas);
-        this._card.start(riverCard, {
-          won,
-          title: won ? 'ACROSS!' : (player.health <= 0 ? 'SWEPT AWAY!' : 'TIME\'S UP!'),
-        });
-        this.infoBar.textContent = won ? 'FORD THE RIVER — ACROSS! The far bank holds.' : 'FORD THE RIVER — the current wins this time.';
+        this._card.start(riverCard, { won: true, title: 'ACROSS!', family: this._survivors() });
+        this.infoBar.textContent = this.lost.length
+          ? `FORD THE RIVER — ${shortName(this.cur.m)} made it across. The river took ${this.lost.length}.`
+          : `FORD THE RIVER — ACROSS! ${shortName(this.cur.m)} ties off a line and the family follows.`;
       }
       return;
     }
@@ -591,14 +655,14 @@ export class FroggerDash {
       });
     });
 
-    // ── Near bank (start) ───────────────────────────────────────────────
+    // ── Near bank (start) and the family waiting their turn ─────────────
     g.drawImage(A.near, 0, NEAR_Y);
     drawFlowers(g, A.nearFlowers, t);
     for (const x of [96, 196, 258]) draw(g, A.reed, x, NEAR_Y - 4);
-    drawFamily(g, A.fam, 84, H - 5, 'idle', { t, gap: 10 });
+    this._drawQueue(g, t);
 
-    // ── Player ──────────────────────────────────────────────────────────
-    this._drawPlayer(g, t);
+    // ── The wader ───────────────────────────────────────────────────────
+    if (this.state !== 'failed') this._drawPlayer(g, t);
     for (const p of this.parts) R(g, p.x, p.y, 1, 2, p.t < 0.25 ? '#ffffff' : '#a8d8ff');
 
     // ── Weather ─────────────────────────────────────────────────────────
@@ -616,19 +680,34 @@ export class FroggerDash {
     }
     if (this.aidT > 0 && Math.floor(t * 8) % 4) label(g, 'FIRST AID!', W / 2, HUD_H + 6, '#ff8a8a', 'center');
 
-    // ── Countdown card ──────────────────────────────────────────────────
+    // ── Cards over the scene ────────────────────────────────────────────
     if (this.state === 'countdown') this._intro(g);
+    else if (this.state === 'lost') this._lostCard(g, t);
+    else if (this.state === 'next') this._nextCard(g, t);
+    else if (this.state === 'failed') this._failedCard(g);
 
     // ── Info bar ─────────────────────────────────────────────────────────
-    const rowLabel =
-      player.row === 0 ? '🏁 FAR BANK' :
-      player.row === 6 ? '🟫 Near bank' :
-      `🌊 River (lane ${player.row}/5)`;
-    const hpLabel  = `♥ ${Math.round(player.health)}%`;
-    const tmLabel  = `⏱ ${Math.max(0, Math.round(this.timer))}s`;
-    const hint     = this.state === 'countdown' ? '' : ' | ↑↓ hop  ←→ shift';
-    this.infoBar.textContent =
-      `FORD THE RIVER — ${rowLabel} | ${hpLabel} | ${tmLabel}${hint}`;
+    const who = `${shortName(this.cur.m)} (try ${this.tryIdx + 1}/${this.queue.length})`;
+    if (this.state === 'failed') {
+      this.infoBar.textContent = 'FORD THE RIVER — the river took the whole family.';
+    } else if (this.state === 'lost') {
+      this.infoBar.textContent = `FORD THE RIVER — ${shortName(this.cur.m)} is lost to the river.`;
+    } else {
+      const rowLabel =
+        player.row === 0 ? '🏁 FAR BANK' :
+        player.row === 6 ? '🟫 Near bank' :
+        `🌊 River (lane ${6 - player.row}/5)`;
+      const hpLabel  = `♥ ${Math.round(player.health)}%`;
+      const tmLabel  = `⏱ ${Math.max(0, Math.round(this.timer))}s`;
+      const hint     = this.state === 'playing' ? ' | ↑↓ hop  ←→ shift' : '';
+      this.infoBar.textContent =
+        `FORD THE RIVER — ${who} | ${rowLabel} | ${hpLabel} | ${tmLabel}${hint}`;
+    }
+  }
+
+  /** Family members still alive after this crossing (for the win card). */
+  _survivors() {
+    return this.family.filter((m, i) => m.alive !== false && !this.lost.includes(i));
   }
 
   _bob(lane, j) { return Math.round(Math.sin(this.t * 2.6 + lane * 1.7 + j * 2.3) * 0.8); }
@@ -657,37 +736,91 @@ export class FroggerDash {
     text(g, 'SAFE', sx + sw / 2, sy + 2, { align: 'center', color: '#fff8d0', shadow: '#3a2410' });
   }
 
+  /** The family still waiting for their turn, lined up on the near bank. */
+  _drawQueue(g, t) {
+    const waiting = this.queue.slice(this.tryIdx + 1);
+    waiting.forEach((e, j) => {
+      const f = this.runners[e.k];
+      const spr = Math.floor(t * 1.5 + j) % 4 === 0 && this.state === 'lost' ? f.jump : f.stand;   // waving them on / crying out
+      draw(g, spr, QUEUE_X + j * QUEUE_GAP, H - 4 - spr.h, true);
+    });
+  }
+
   _drawPlayer(g, t) {
-    const p = this.player, A = this.art;
-    let bottom = ROW_BOTTOM[p.row];
-    if (p.riding) bottom += this._bob(p.riding.laneIdx, p.riding.log ? this.lanes[p.riding.laneIdx].logs.indexOf(p.riding.log) : 0);
-    const sink = p.inWater ? 3 + Math.round(Math.sin(t * 7) * 1) : 0;
-    const x = Math.round(p.x * SX) + 1, y = bottom - A.wagon.h + sink;
-    const flick = p.inWater && Math.floor(t * 12) % 2 === 0;
-    draw(g, flick ? A.hurt : A.wagon, x, y, this.face < 0);
-    if (p.inWater) {
-      // Water swallowing the wheels and lower body
-      const wl = bottom - 1;
+    const p = this.player, A = this.art, f = this.runners[this.cur.k];
+    // Walking up from the line before their try
+    if (this.state === 'next') {
+      const k = ease(1 - this.nextT / NEXT_PAUSE);
+      const x0 = QUEUE_X - 2, x1 = Math.round(START_X * SX + (PLAYER_W * SX - f.w) / 2);
+      const spr = k < 1 ? f.run[Math.floor(t * 10) % 4] : f.stand;
+      draw(g, spr, Math.round(x0 + (x1 - x0) * k), FEET[6] - spr.h, x1 < x0);
+      return;
+    }
+    let feet = FEET[p.row];
+    if (p.riding) feet += this._bob(p.riding.laneIdx, this.lanes[p.riding.laneIdx].logs.indexOf(p.riding.log));
+    const x = Math.round(p.x * SX + (PLAYER_W * SX - f.w) / 2);
+    const lost = this.state === 'lost';
+    // Sinking: a little while thrashing in open water; all the way under when lost
+    const sinkK = lost ? Math.min(1, (1 - this.lostT / LOST_PAUSE) * 1.6) : 0;
+    const sink = lost ? 6 + Math.round(sinkK * (f.stand.h - 2)) : p.inWater ? 6 + Math.round(Math.sin(t * 7)) : 0;
+    const hop = this.hopT > 0 ? Math.round(Math.sin(Math.PI * (1 - this.hopT / HOP_T)) * 5) : 0;
+    let spr = f.stand;
+    if (hop > 0) spr = f.jump;
+    else if (this.walkT > 0) spr = f.run[Math.floor(t * 12) % 4];
+    else if (p.inWater || lost) spr = Math.floor(t * 6) % 2 ? f.jump : f.stand;     // arms up, thrashing
+    const hurt = (p.inWater && !lost && Math.floor(t * 12) % 2 === 0);
+    const hs = A.hurt[this.cur.k];
+    const y = feet - spr.h + sink - hop;
+    if (sinkK < 1) draw(g, hurt ? (spr === f.jump ? hs.jump : hs.stand) : spr, x, y, this.face < 0);
+    if (p.inWater || lost) {
+      // Water swallowing the legs (or everything, as they go under)
+      const wl = feet - 1;
       const water = (this.flood ? ['#6a6448', '#5a5a3e', '#4e4e36', '#44442e', '#3a3a28']
         : ['#2e74c8', '#2a6ac0', '#225aa8', '#1c4a92', '#1a3e80'])[p.row - 1];
-      for (let dx = -3; dx < PLAYER_W * SX + 3; dx++) {
+      for (let dx = -3; dx < f.w + 5; dx++) {
         const wy = wl + Math.round(Math.sin(dx * 0.6 + t * 9));
         R(g, x - 1 + dx, wy, 1, sink + 3, water);
         R(g, x - 1 + dx, wy, 1, 1, '#e8f4ff');
       }
+      if (sinkK >= 1) {   // bubbles where they went under
+        for (let k = 0; k < 3; k++) {
+          const by = wl - ((t * 14 + k * 4) % 10);
+          R(g, x + 2 + k * 3, Math.round(by), 1, 1, '#e8f4ff');
+        }
+      }
     }
-    // Leader marker above the car
-    if (this.state === 'playing' && p.row !== 0) R(g, x + 8, y - 4 + (Math.floor(t * 4) % 2), 2, 2, '#ffd040');
+    // Marker over the one fording
+    if (this.state === 'playing' && p.row !== 0) R(g, x + Math.floor(f.w / 2), y - 5 + (Math.floor(t * 4) % 2), 2, 2, '#ffd040');
+  }
+
+  /** One small figure per try: waiting, fording now, or lost. */
+  _tryIcons(g, x0, y) {
+    const n = this.queue.length;
+    this.queue.forEach((e, j) => {
+      const x = x0 + j * 7;
+      const gone = this.lost.includes(e.i);
+      const now = j === this.tryIdx && !gone;
+      R(g, x - 1, y - 1, 7, 9, INK);
+      R(g, x + 1, y, 3, 3, gone ? '#5a5664' : SKINS[(e.k * 2 + 1) % SKINS.length]);
+      R(g, x, y + 3, 5, 4, gone ? '#3a3644' : SHIRTS[e.k % SHIRTS.length]);
+      if (gone) { for (let k = 0; k < 5; k++) { R(g, x + k, y + 1 + k, 1, 1, '#ff4a3a'); R(g, x + 4 - k, y + 1 + k, 1, 1, '#ff4a3a'); } }
+      if (now) R(g, x, y + 8, 5, 1, '#ffd040');
+    });
+    return x0 + n * 7;
   }
 
   _hud(g, t) {
     const p = this.player;
     plate(g, 0, 0, W, HUD_H, { alpha: 0.92 });
     text(g, 'HP', 4, 3, { color: '#ff9a9a', shadow: INK });
-    const hc = p.health > 60 ? ['#3ad04a', '#a8f8a0'] : p.health > 30 ? ['#e8a020', '#ffe08a'] : ['#e83a2a', '#ffa08a'];
-    meter(g, 17, 2, p.health / 100, { col: hc[0], hi: hc[1], bh: 7 });
-    const lane = p.row === 0 ? 'FAR BANK' : p.row === 6 ? 'NEAR BANK' : `LANE ${6 - p.row}/5`;
-    text(g, lane, W / 2, 3, { align: 'center', color: p.inWater ? '#ff8a7a' : '#ffe8a0', shadow: INK });
+    const hp = this.state === 'lost' || this.state === 'failed' ? 0 : p.health;
+    const hc = hp > 60 ? ['#3ad04a', '#a8f8a0'] : hp > 30 ? ['#e8a020', '#ffe08a'] : ['#e83a2a', '#ffa08a'];
+    meter(g, 17, 2, hp / 100, { col: hc[0], hi: hc[1], bh: 7 });
+    const x = this._tryIcons(g, 86, 2);
+    if (this.state !== 'failed') {
+      const lost = this.state === 'lost';
+      text(g, shortName(this.cur.m), x + 3, 3, { color: lost ? '#ff8a7a' : p.inWater ? '#ff8a7a' : '#ffe8a0', shadow: INK });
+    }
     const low = this.timer < 8 && Math.floor(t * 4) % 2;
     bar(g, W - 86, 3, 56, 7, this.timer / GAME_DURATION, low ? '#e83a2a' : '#4a8ae8', low ? '#ffa08a' : '#a8d0ff');
     text(g, `${Math.max(0, Math.ceil(this.timer))}S`, W - 4, 3, { align: 'right', color: '#e8e4f0', shadow: INK });
@@ -695,51 +828,96 @@ export class FroggerDash {
 
   _intro(g) {
     const A = this.art;
+    const n = this.queue.length;
     g.globalAlpha = 0.55; R(g, 0, HUD_H, W, H - HUD_H, '#06080e'); g.globalAlpha = 1;
-    drawLogo(g, 'FORD THE RIVER', W / 2, 24, 3, GOLD);
-    countdown(g, this.countdown, W / 2, 58);
-    label(g, 'RIDE THE LOGS TO THE FAR BANK.', W / 2, 98, '#ffffff', 'center');
-    label(g, 'OPEN WATER HURTS - DON\'T DRIFT OFF!', W / 2, 108, '#a8d8ff', 'center');
-    label(g, this.showTouch ? 'TAP ABOVE/BELOW TO HOP, BUTTONS TO SHIFT' : 'ARROWS / WASD: HOP LANES AND SHIFT', W / 2, 120, '#c8c4d8', 'center');
-    if (A.perkLines) A.perkLines.slice(0, 2).forEach((ln, i) => label(g, ln, W / 2, 132 + i * 10, '#7ae07a', 'center'));
-    else label(g, 'NO SUPPLIES FOR THIS ONE', W / 2, 132, '#8a8698', 'center');
+    drawLogo(g, 'FORD THE RIVER', W / 2, 22, 3, GOLD);
+    countdown(g, this.countdown, W / 2, 50);
+    label(g, 'ONE AT A TIME, HOP THE LOGS TO THE FAR BANK.', W / 2, 86, '#ffffff', 'center');
+    label(g, n > 1 ? `EVERY FAMILY MEMBER IS ONE TRY - ${n} TRIES.` : 'ONE TRY. THERE IS NO ONE ELSE.', W / 2, 96, '#a8d8ff', 'center');
+    label(g, 'IF THE RIVER TAKES THEM, THEY ARE LOST.', W / 2, 106, '#ff9a8a', 'center');
+    label(g, this.showTouch ? 'TAP ABOVE/BELOW TO HOP, BUTTONS TO SHIFT' : 'ARROWS / WASD: HOP LANES AND SHIFT', W / 2, 118, '#c8c4d8', 'center');
+    if (A.perkLines) A.perkLines.slice(0, 2).forEach((ln, i) => label(g, ln, W / 2, 130 + i * 10, '#7ae07a', 'center'));
+    else label(g, 'NO SUPPLIES FOR THIS ONE', W / 2, 130, '#8a8698', 'center');
+    label(g, `FIRST: ${shortName(this.cur.m)}`, W / 2, 142 + (A.perkLines && A.perkLines.length > 1 ? 10 : 0), '#ffe060', 'center');
+  }
+
+  _lostCard(g, t) {
+    const k = Math.min(1, (1 - this.lostT / LOST_PAUSE) * 3);
+    if (k < 0.2) return;
+    this._band(g, 18, this.queue.length - this.tryIdx > 1 ? 54 : 44);
+    const title = this.lostCause === 'time' ? 'THE WATER ROSE' : this.lostCause === 'drowned' ? 'PULLED UNDER' : 'SWEPT AWAY';
+    drawLogo(g, title, W / 2, 24, 3, BLUE);
+    label(g, `${shortName(this.cur.m)} IS LOST TO THE RIVER.`, W / 2, 50, '#ffffff', 'center');
+    const left = this.queue.length - this.tryIdx - 1;
+    if (left > 0) label(g, `${left} ${left === 1 ? 'TRY' : 'TRIES'} LEFT`, W / 2, 61, '#a8d8ff', 'center');
+  }
+
+  /** Dim band behind a banner so it reads over the far bank. */
+  _band(g, y, h) {
+    g.globalAlpha = 0.55; R(g, 0, y, W, h, '#06080e'); g.globalAlpha = 1;
+  }
+
+  _nextCard(g, t) {
+    this._band(g, 20, 36);
+    drawLogo(g, `${shortName(this.cur.m)}'S TURN`, W / 2, 26, 2, GOLD);
+    label(g, 'GET READY...', W / 2, 46, '#ffffff', 'center');
+  }
+
+  _failedCard(g) {
+    g.globalAlpha = 0.6; R(g, 0, HUD_H, W, H - HUD_H, '#06080e'); g.globalAlpha = 1;
+    drawLogo(g, 'FAMILY LOST', W / 2, 52, 4, BLUE);
+    label(g, 'THE RIVER TOOK EVERYONE.', W / 2, 92, '#ffffff', 'center');
   }
 
   // ── Result builder ─────────────────────────────────────────────────────────
 
   _buildResult() {
-    const healthLost = Math.round(100 - this.player.health);
+    const lost = this.lost.filter(i => i >= 0);
+    const who = nameList(this.lost.map(i => (i >= 0 ? this.family[i].name : 'You')));
 
     if (this.state === 'won') {
-      const cleanCross = healthLost < 10;
+      const healthLost = Math.round(100 - this.player.health);
+      const hero = this.cur.m.name || 'You';
+      if (!this.lost.length) {
+        const cleanCross = healthLost < 10;
+        return {
+          survived: true,
+          won: true,
+          used: this.used,
+          lost,
+          narrative: cleanCross
+            ? `Log by log, ${hero} picks a way across the churning current and ties off a line on the far bank. The family follows it over, and the car crawls out after them.`
+            : `${hero} makes it — barely, half-drowned twice — and ties off a line. The family follows it across the debris-choked river.`,
+          effects: {
+            ...(healthLost > 0 ? { health: -healthLost } : {}),
+            morale:  cleanCross ? 10 : 5,
+            fuel:    -5,
+          },
+        };
+      }
+      // Deaths cost morale through the death path in main.js; no crossing bonus here
+      const alone = this._survivors().length <= 1;
       return {
         survived: true,
         won: true,
         used: this.used,
-        narrative: cleanCross
-          ? 'Log by log, you pick your way across the churning current without a scratch. The far bank rises solid under your wheels.'
-          : 'You make it — barely. Water floods the floorboards twice, but sheer momentum gets you across the debris-choked river.',
+        lost,
+        narrative: alone
+          ? `The river took ${who}. ${hero} finally reaches the far bank alone and winches the car across in silence.`
+          : `The river took ${who}. ${hero} finally reaches the far bank and ties off a line, and the rest of the family crosses without a word.`,
         effects: {
-          health:  -Math.max(0, healthLost),
-          morale:  cleanCross ? 10 : 5,
+          ...(healthLost > 0 ? { health: -healthLost } : {}),
           fuel:    -5,
         },
       };
-    } else {
-      const sweptAway = this.player.health <= 0;
-      return {
-        survived: false,
-        won: false,
-        used: this.used,
-        narrative: sweptAway
-          ? 'The current takes you downstream. You claw back to the near bank, soaked and shaking, vehicle scraped along gravel.'
-          : 'Time runs out in mid-crossing. The water rises. You retreat to the near bank before you lose the vehicle entirely.',
-        effects: {
-          health:  -28,
-          morale:  -12,
-          fuel:    -8,
-        },
-      };
     }
+    return {
+      survived: false,
+      won: false,
+      used: this.used,
+      lost,
+      narrative: `One by one, the river took them: ${who}. No one is left to cross.`,
+      effects: {},
+    };
   }
 }

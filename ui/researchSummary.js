@@ -9,6 +9,7 @@
  */
 
 import { SSP_DEFS, YEAR_DEFS } from '../data/ssp.js';
+import { hurricaneSummaryText, HUTRACK_CITATION } from './hurricaneCard.js';
 
 // Abbreviated inline citations for display
 const CITE = {
@@ -20,6 +21,7 @@ const CITE = {
   cil:        'Climate Impact Lab, 2026',
   frbsf:      'Fernandez-Navia et al., <em>FRBSF Economic Letter</em>, 2023',
   martinez:   'Martinez-Villalobos et al., <em>Nature Geoscience</em>, 2025',
+  hutrack:    'HUTrackDB, from NOAA HURDAT2',
 };
 
 // Origin-city-specific climate context sentences
@@ -116,7 +118,21 @@ const PERIL_SCIENCE = {
     </div>`;
   },
 
-  hurricane: (m, originId, count) => PERIL_SCIENCE.flood(m, originId, count).replace('FLOODING', 'HURRICANE / STORM SURGE'),
+  // Flood science plus the real landfall record (HUTrackDB) for each place
+  // the player met a hurricane.
+  hurricane: (m, originId, count, sites = []) => {
+    const base = PERIL_SCIENCE.flood(m, originId, count).replace('FLOODING', 'HURRICANE / STORM SURGE');
+    const lines = [...new Set(sites)].map(hurricaneSummaryText).filter(Boolean);
+    if (!lines.length) return base;
+    const record = `
+      <p class="science-history">
+        <strong>The record behind your storm${count > 1 ? 's' : ''}:</strong>
+        ${lines.join(' ')}
+        <span class="science-citation">[${CITE.hutrack}]</span>
+      </p>
+    </div>`;
+    return base.replace(/<\/div>\s*$/, record);
+  },
 
   wildfire: (m, originId, count) => `
     <div class="science-block">
@@ -262,7 +278,7 @@ export function generateResearchSummary(game) {
   const perilBlocks = topPerils
     .map(({ type, count }) => {
       const fn = PERIL_SCIENCE[type];
-      return fn ? fn(m, origin?.id, count) : '';
+      return fn ? fn(m, origin?.id, count, game.hurricaneSites || []) : '';
     })
     .join('');
 
@@ -334,6 +350,7 @@ export function generateResearchSummary(game) {
           <li>Martinez-Villalobos, C. et al. (2025). Accelerating increase in the duration of heatwaves under global warming. <em>Nature Geoscience</em>, 18, 716–723.</li>
           <li>Climate Impact Lab (2026). Human Health: Measuring the Impact of Rising Temperatures on Mortality. CIL_MortalityReport_2026.</li>
           <li>Fernandez-Navia, T.M. et al. (2023). How Long Do Rising Temperatures Affect Economic Growth? <em>FRBSF Economic Letter</em>, 2023-15.</li>
+          <li>${HUTRACK_CITATION}</li>
         </ul>
         <p class="research-refs-note">Full citations and calibration notes: <code>REFERENCES.md</code></p>
       </div>

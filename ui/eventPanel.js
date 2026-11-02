@@ -1,10 +1,17 @@
+import { hurricaneCardHtml } from './hurricaneCard.js';
+
 export class EventPanel {
   constructor(containerId, onChoice) {
     this.container = document.getElementById(containerId);
     this.onChoice = onChoice;
   }
 
-  show(event) {
+  /**
+   * @param {object} event
+   * @param {object} [context] — { waypoint } where the event fired; used to
+   *   attach real-world data (e.g. HUTrackDB landfall record for hurricanes)
+   */
+  show(event, context = {}) {
     this.container.innerHTML = '';
     this.container.classList.add('active');
 
@@ -25,6 +32,8 @@ export class EventPanel {
         <h3 class="event-name">${event.name}</h3>
       </div>
       <p class="event-desc">${event.description}</p>
+      ${event.perilType === 'hurricane' && context.waypoint
+        ? hurricaneCardHtml(context.waypoint.name) : ''}
       <div class="event-choices"></div>
     `;
 

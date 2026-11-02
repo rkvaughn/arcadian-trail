@@ -48,6 +48,7 @@ export class Game {
     this.flags = {};
     this.itemUses = {};
     this.routeModifier = null;
+    this.hurricaneSites = []; // waypoint names where a hurricane event fired
   }
 
   setState(newState) {
@@ -98,6 +99,7 @@ export class Game {
     this.flags = {};
     this.itemUses = {};
     this.routeModifier = null;
+    this.hurricaneSites = [];
 
     const sspDef = SSP_DEFS[this.ssp];
     const originDesc = getOriginDescription(originCity, this.ssp);
@@ -155,6 +157,7 @@ export class Game {
       this.recentPerilTypes.push(this.currentEvent.perilType);
       if (this.recentPerilTypes.length > 3) this.recentPerilTypes.shift();
       this.perilHistory.push(this.currentEvent.perilType);
+      if (this.currentEvent.perilType === 'hurricane') this.hurricaneSites.push(this.route[this.waypointIndex].name);
       this.state = STATES.EVENT;
       this.addJournal(`Day ${this.day}: ${this.currentEvent.name}!`);
       return { type: 'event', event: this.currentEvent };

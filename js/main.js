@@ -142,7 +142,7 @@ class GameController {
         case 'event':
           clearInterval(this.travelInterval);
           this.travelInterval = null;
-          this.eventPanel.show(result.event);
+          this.eventPanel.show(result.event, { waypoint: this.game.getCurrentWaypoint() });
           this.logger.log(`EVENT: ${result.event.name}`, 'event');
           break;
 

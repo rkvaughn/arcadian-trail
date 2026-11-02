@@ -133,6 +133,38 @@ https://www.frbsf.org/research-and-insights/publications/economic-letter/2023/06
 
 ---
 
+## Hurricane Landfall Record — HUTrackDB
+
+**HUTrackDB (2026)** — R. K. Vaughn.
+*Curated Atlantic and Pacific hurricane track geodatabase from NOAA HURDAT2, with
+complete landfall detection.* Build of 2026-10-07 (commit `175e561`, schema 1.0.0).
+https://github.com/rkvaughn/HUTrackDB
+
+Built from NOAA National Hurricane Center HURDAT2:
+- Atlantic 1851–2025, `hurdat2-atl-1851-2025-092326.txt` (revised 2026-09-23)
+- NE/N-Central Pacific 1949–2025, `hurdat2-nepac-1949-2025-092926.txt` (revised 2026-09-29)
+- Format specification: Landsea, C. (April 2022), https://www.aoml.noaa.gov/hrd/hurdat/hurdat2-format.pdf
+- Database reference: Landsea, C. W. & Franklin, J. L. (2013). Atlantic Hurricane
+  Database Uncertainty and Presentation of a New Database Format. *Monthly Weather
+  Review*, 141(10), 3576–3592. https://doi.org/10.1175/MWR-D-12-00254.1
+
+**Hurricane projections (documentation only, pending PI review — not used in mechanics):**
+IPCC AR6 WG1 Ch. 11 (Seneviratne et al., 2021) Table 11.2 and §11.7.1.5;
+Knutson, T. et al. (2020), Tropical Cyclones and Climate Change Assessment Part II,
+*BAMS* 101(3), E303–E322, https://doi.org/10.1175/BAMS-D-18-0194.1;
+NCA5 Ch. 2 (Marvel et al., 2023), https://doi.org/10.7930/NCA5.2023.CH2.
+Verbatim quotes and page numbers: `docs/perils/hurricane.md` §4.
+
+- **Game use:** `scripts/build_hurricane_stats.py` reads HUTrackDB's `landfalls`
+  and `storms` tables and writes `data/hurricaneStats.js`: for every route
+  waypoint, the count, Saffir-Simpson mix, annual rate, strongest and most
+  recent hurricane landfalls within 60 nmi. Shown in the event panel when a
+  hurricane event fires (`ui/hurricaneCard.js`) and in the end-screen research
+  summary. **Display only** — it does not change event odds or damage.
+- Full method and limitations: `docs/perils/hurricane.md`.
+
+---
+
 ## Notes on Calibration Assumptions
 
 | Parameter | Value | Status |
@@ -144,3 +176,6 @@ https://www.frbsf.org/research-and-insights/publications/economic-letter/2023/06
 | Sub-lethal multiplier | Uniform[5, 10] | Reflects morbidity:mortality ratio uncertainty |
 | Fuel sector amplifier | 2× | Design calibration over SF Fed economy-wide estimate |
 | SLR 2075 values | Linear interpolation between 2050 and 2100 | IPCC AR6 does not publish 2075 directly |
+| Hurricane "near" radius | 60 nmi (111.12 km) | NOAA Historical Hurricane Tracks default radius; same as HUTrackDB `bypass_radius_km` — **confirmed by PI [2026-11-01]** |
+| Hurricane modern-era start | 1991 | HURDAT2 spec: to-the-minute landfall times + complete native flagging resume in 1991 — use **confirmed by PI [2026-11-01]** |
+| Inland waypoint fallback | Record around nearest hurricane landfall | Design choice, no numeric parameter — **confirmed by PI [2026-11-01]** |

@@ -48,13 +48,15 @@ Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurri
 
 | # | Task | Points | Priority | Notes |
 |---|------|--------|----------|-------|
-| D1 | Peril doc template + `docs/perils/` scaffold | 1 | 1 | Template with the 5 required sections above. Add a check (script or T3 test) that fails if an enabled event id has no doc. |
+| D1b | Peril-doc check | 1 | 1 | Template done (`docs/perils/_TEMPLATE.md`). Remaining: a check (script or T3 test) that fails if an enabled event id has no doc. 16 climate event ids still need docs. |
 | D2 | Per-waypoint hazard profile pipeline | 5 | 1 | Offline Python script → `data/hazards/waypoints.json`. Candidate source: FEMA National Risk Index (county-level, per-hazard risk for wildfire, hurricane, riverine + coastal flooding, tornado, heat wave, drought, cold wave). Reachable via ArcGIS REST — reuse `~/Projects/utilities/arcgis_rest.py`. |
 | D3 | Peril-specific source datasets | 5 | 2 | Evaluate per peril: USFS Wildfire Risk to Communities; NOAA HURDAT2 (hurricane tracks); NOAA SPC tornado database; NOAA Storm Events Database; NOAA 2022 Sea Level Rise Technical Report + high-tide flooding outlooks (`king_tide`); US Drought Monitor; NOAA HMS smoke / EPA AirNow (`toxic_air`). Verify each source is still online before building on it. |
 | D4 | Location-specific SSP projections | 5 | 2 | Replace the single global ΔT with downscaled CMIP6 projections at each waypoint (candidates: NASA NEX-GDDP-CMIP6, LOCA2). Use for heat days, extreme precip, and drought indices by SSP/year. Fifth National Climate Assessment (NCA5) for regional context. |
 | D5 | Rewire `js/events.js` weighting to hazard JSON | 3 | 3 | Event weight = f(waypoint hazard profile, SSP projection). Keep live weather as flavor text only, or drop it — also resolves T1 (API key). |
 | D6 | Scale currently-unscaled perils | 2 | 3 | Hurricane, tornado, drought, dust storm, flash freeze, and smoke currently get no SSP scaling (or borrow the flood rate). Each needs its own cited relationship — or an explicit "no robust projection" note in its doc. |
 | D7 | In-game "Learn more" from peril docs | 2 | 4 | Event panel link + research summary section built from `docs/perils/`. |
+| D9 | Hurricane track passes near inland waypoints | 2 | 3 | Add "hurricanes whose track passed within 60 nmi" from HUTrackDB `track_points` (NOAA Historical Hurricane Tracks style), so inland stops get local numbers instead of the nearest-coast fallback. |
+| D10 | Hurricane projections → severity mechanic | 3 | 3 | `docs/perils/hurricane.md` §4 has verbatim IPCC AR6 / Knutson 2020 values (pending PI review). The sources support scaling hurricane *severity* (rain, Cat 4–5 share, surge) with warming, not frequency. Needs CR1 resolved first (ΔT ↔ warming-level mapping). |
 | D8 | Location-gate place-specific events | 2 | 2 | `terrainBonus` only boosts odds (×1.8), never excludes — e.g. `king_tide` ("The Atlantic is reclaiming the highway") fired in the Phoenix desert during testing on 2026-11-01. Gate on the waypoint's hazard profile from D2 (e.g. coastal flood exposure) instead of a hardcoded terrain list. |
 
 #### Calibration review items (found 2026-11-01 — verify, do not change without PI sign-off)
@@ -191,6 +193,7 @@ Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurri
 | P2-G3 | Multi-stage linked events — solar_signal→relay_cache and refugees_helped→refugee_stash pairs | 3 | 10 | 2026-06-14 |
 | GX1 | Heat weather now renders — `js/weather.js` emitted `'hot'` but renderer checked `'heat'`; renamed, and added `drawHeatShimmer` overlay to `drawWeather` | 1 | 11 | 2026-11-01 |
 | GX2 | Smooth render loop — `requestAnimationFrame` (~60 fps, was 4 fps) with fractional time-based `frame` clock (1 unit = 250 ms, so animation speeds unchanged); `Math.floor(frame)` at `===`/index sites; DOM writes cached; progress map still throttled to 250 ms | 2 | 11 | 2026-11-01 |
+| D-HU | HUTrackDB hurricane linkage — `scripts/build_hurricane_stats.py` → `data/hurricaneStats.js` (51 waypoints); "Real hurricane record" card in hurricane events (`ui/hurricaneCard.js`), end-screen record + citation, `docs/perils/hurricane.md` (first peril doc), template `docs/perils/_TEMPLATE.md`, REFERENCES entries. Calibrations (60 nmi radius, 1991 era, nearest-coast fallback) confirmed by PI 2026-11-01 | 5 | 12 | 2026-11-01 |
 | P2-G5 | Item consumable limits — `maxUses: N` on first_aid, `game.itemUses = {}` tracker, enforced in `applyChoice()` | 2 | 10 | 2026-06-14 |
 
 ---

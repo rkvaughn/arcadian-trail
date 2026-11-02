@@ -75,17 +75,12 @@ Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurri
 
 | # | Task | Points | Priority | Notes |
 |---|------|--------|----------|-------|
-| GX3 | Raise logical resolution | 5 | 2 | 80×45 → 160×90 (or 320×180). Gives room for readable sprites, faces, and detail. Requires rescaling scene helpers. |
-| GX4 | Parallax layers + cached static layers | 3 | 2 | 3–4 scrolling depth layers per terrain (sky / far / mid / road). Pre-render static layers to offscreen canvases so only moving parts redraw each frame. |
-| GX5 | Palette-based lighting | 3 | 3 | Replace CSS `filter` day/night (night is `brightness(0.28)` — muddy) with per-terrain palettes for dawn/day/dusk/night, plus dithered sky gradients. |
-| GX6 | Particle system | 3 | 3 | Embers, ash, smoke plumes, rain splashes, dust, heat shimmer, debris. Shared module used by scenes and mini-games. |
 | GX7 | Data-driven visuals | 3 | 2 | Pairs with Phase 6: water line height from the run's SLR value, smoke density from the waypoint's wildfire/smoke data, sun glare from heat projections. Makes the climate data visible. |
-| GX8 | Character + vehicle sprites | 3 | 3 | Hand-made PNG sprite sheets in `assets/` (vehicle with visible family/cargo, damage states). |
-| GX9 | Event "juice" | 2 | 4 | Screen shake, flash on impact, short animated intro per peril scene. |
+| GX8 | Vehicle damage states | 2 | 3 | The family car is now a procedural NES-style sprite with the family visible in the windows and luggage on the roof (GX12/GX13). Remaining: damage states (dents, cracked glass, smoke) driven by the health meter. |
 | GX11 | Frogger flood speed-up never triggers | 1 | 4 | `ui/froggerDash.js` checks `weatherData.icon === 'flood'`, but `js/weather.js` never emits `'flood'`. Key it to `'rain'`/`'storm'` or to the event that launched the mini-game. |
 | GX10 | Unique scene per climate event | 5 | 4 | Partly done in GX12: cut scenes now branch on event id (drought / dust_storm / heatwave, road_washout / swollen_river / king_tide, toxic_air, flash_freeze, bridge_collapse, the social and health variants). Remaining: hurricane/tornado have one scene each; positive events share a scene with small prop variants. |
 
-> **GX12 note (2026-11-01):** event cut scenes, title and end screens now use the new `ui/cutscenes/` kit at native 320×180 with parallax, particles, dithered palettes, sprites and intro animations. GX3–GX9 still apply to the **travel** scenes (`data/pixelScenes.js`, still 80×45) — port them onto the same kit.
+> **GX12/GX13 note (2026-11-01):** every scene (travel, events, title, end, mini-game cards) now draws at native 320×180 with the `ui/cutscenes/` kit. GX3–GX6, GX9, V1 and V2 are done; `data/pixelScenes.js` is retired.
 
 ---
 
@@ -112,8 +107,6 @@ Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurri
 
 | # | Task | Points | Notes |
 |---|------|--------|-------|
-| V1 | 3rd pixel scene variant per terrain | 3 | Pixel art equivalent of ASCII V1 — add third scene drawing function per terrain in `data/pixelScenes.js` |
-| V2 | Directional weather animation | 2 | Already partially present in pixel renderer; extend for all weather types |
 | V5 | Terrain-specific event panel border colors | 1 | CSS only — wire `data-terrain` from V4A work |
 | V6 | Dashboard resource bar icons | 1 | CSS/unicode — replace plain labels |
 
@@ -199,6 +192,7 @@ Event ids that need docs (climate-driven first): `wildfire`, `toxic_air`, `hurri
 | G24 | Shed Dash rebuilt as an original 8-bit side-scrolling platformer (NES-era style, own art); stronger gusts, harder overall; respawn past pits (no fall loops); bot-tested balance with and without supplies | 8 | 12 | 2026-11-01 |
 | D-HU | HUTrackDB hurricane linkage — `scripts/build_hurricane_stats.py` → `data/hurricaneStats.js` (51 waypoints); "Real hurricane record" card in hurricane events (`ui/hurricaneCard.js`), end-screen record + citation, `docs/perils/hurricane.md` (first peril doc), template `docs/perils/_TEMPLATE.md`, REFERENCES entries. Calibrations (60 nmi radius, 1991 era, nearest-coast fallback) confirmed by PI 2026-11-01 | 5 | 12 | 2026-11-01 |
 | GX12 | Cut scene overhaul — NES-quality pixel art for every non-interactive scene. New `ui/cutscenes/` kit at native 320×180 (outlined string-art sprites, 5×7 bitmap font + banded logo text, Bayer-dithered skies, wrapping parallax strips, particles, flame walls, heat shimmer, lightning) and a director with a pixel-dissolve intro + sliding title banner. 10 event scenes rebuilt with per-peril lighting, intro animations, the family + station wagon, and event-id variants; title (V3), win/lose end screens (V4, lose scene by dominant peril), and Barricade/River win-lose cards. Old 80×45 event scenes removed from `data/pixelScenes.js`. Dev viewer: `dev/cutscenes.html` (serve with `python3 dev/serve.py`) | 13 | 13 | 2026-11-01 |
+| GX13 | Travel scene overhaul — the driving view rebuilt on the cut scene kit at native 320×180 (`ui/cutscenes/travel/`): 9 terrains × 3 variants (variant per waypoint), 3–4 parallax layers incl. 960 px mid layers, perspective road (per-row scroll), the family car with the family visible in the windows, suspension bob, dust/spray, headlights; dawn/day/dusk/night sky palettes + multiply-tinted land replace the CSS filters (GX5); in-scene weather — rain, drizzle, storm + lightning, snow cover, fog banks, wind streaks/leaves, heat shimmer + glare (V2, GX6); roadside sign with the current waypoint name; Bayer dissolve between scenes and back from cut scenes. Closes GX3, GX4, GX5, GX6, GX9, V1, V2. `data/pixelScenes.js` removed | 13 | 13 | 2026-11-01 |
 | V3 | Title screen pixel art / logo — animated dawn road trip with banded pixel logo (part of GX12) | 2 | 13 | 2026-11-01 |
 | V4 | End screen win/lose scene cards — refuge arrival with fireworks / abandoned car at dusk themed by dominant peril (part of GX12) | 2 | 13 | 2026-11-01 |
 | P2-G5 | Item consumable limits — `maxUses: N` on first_aid, `game.itemUses = {}` tracker, enforced in `applyChoice()` | 2 | 10 | 2026-06-14 |

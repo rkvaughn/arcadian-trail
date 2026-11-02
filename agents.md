@@ -24,7 +24,7 @@ Read these files, in this order, to be oriented. Skip everything else unless the
 **Only if task involves rendering or visuals:**
 - `ui/pixelRenderer.js` — canvas-based pixel art renderer (replaced ASCII renderer in Phase 4); hands event/result states to the cut scene player
 - `ui/cutscenes/` — native 320×180 cut scenes: `kit.js` (sprites, bitmap font, dither, parallax, particles), `sprites.js` (family, station wagon, props), `director.js` (intro dissolve + title banner), `scenes/<peril>.js` (one per perilType, with event-id variants), `screensArt.js` (title, end screens, mini-game win/lose cards). Preview any scene with `python3 dev/serve.py` → `/dev/cutscenes.html`
-- `data/pixelScenes.js` — procedural pixel scene drawing functions per terrain/event type
+- `ui/cutscenes/travel/` — the driving scene: `travel.js` (sky palettes per time of day, perspective road, family car, weather, signs, dissolves) + `terrains/<terrain>.js` (3 variants each, `build(k)` contract documented in travel.js)
 - `data/ssp.js` — terrain and scenario color context (SSP difficulty palette used by HUD)
 - `style.css` — terrain palette CSS vars (`[data-terrain="..."]`), day/night classes, SSP/year UI, research summary panel
 
@@ -118,12 +118,11 @@ Multipliers stored on `game.sspMultipliers`. Applied in `js/travel.js` (burn rat
 `js/events.js` (event probability weights). Full derivations in `REFERENCES.md`.
 
 ### Rendering Pipeline (`ui/pixelRenderer.js`)
-1. Select procedural pixel scene from `data/pixelScenes.js` based on terrain/event type
-2. Composite vehicle sprite at road position
-3. Apply weather overlay (pixel-level color pass)
-4. Apply terrain transition wipe if `transitionFrame >= 0`
-5. Set `canvas.setAttribute('data-terrain', terrain)` to activate CSS palette vars
-6. Apply day/night CSS class to canvas container
+Everything draws at the canvas's native 320×180; CSS scales it with crisp pixels.
+1. EVENT / RESULT state → the event's cut scene (`ui/cutscenes/scenes/<peril>.js`) via `CutscenePlayer`
+2. Otherwise → `TravelRenderer` (`ui/cutscenes/travel/`): terrain module by waypoint terrain, variant by `waypointIndex`, palette by time of day (`game.day`), weather drawn in-scene from `weatherData.icon`
+3. Scene changes (new terrain/variant/time/weather, or back from a cut scene) use a Bayer pixel dissolve
+4. Set `data-terrain` on the canvas and `.game-layout` to activate CSS palette vars (no CSS filters)
 
 ### Resource Model
 Five meters: `fuel`, `water`, `food`, `health`, `morale` (0–100).
@@ -149,7 +148,7 @@ The caller (`js/main.js`) applies `result.effects` to resources and routes to RE
 Primary agent for all work on this project:
 - All JavaScript, HTML, CSS changes
 - Game logic, events, items, routes, flags
-- Pixel art scene authoring (travel scenes: 80×45 in `data/pixelScenes.js`; cut scenes: native 320×180 via the `ui/cutscenes/` kit)
+- Pixel art scene authoring (native 320×180 via the `ui/cutscenes/` kit: travel terrains in `ui/cutscenes/travel/terrains/`, cut scenes in `ui/cutscenes/scenes/`)
 - Backlog management — update `BACKLOG.md` on task completion
 - Scientific calibration — all quantitative values must cite a source in `REFERENCES.md`
 - Git commits and pushes
@@ -170,7 +169,7 @@ When delegating to Gemini: pass `data/eventDefs.js` + `js/game.js` + the specifi
 - **No build tool** — vanilla ES6 `import`/`export`. All modules referenced by relative path. No npm packages at runtime.
 - **GitHub Pages auto-deploy** — push to `main` → live within ~60 seconds. No build step needed.
 - **No inline styles** — all colors via CSS classes or CSS custom properties. Terrain palettes live in `style.css` as `[data-terrain="..."]` blocks; activated by setting `data-terrain` attribute on the canvas element.
-- **Pixel scene format** — travel scenes are procedural drawing functions in `data/pixelScenes.js` operating on an 80×45 logical pixel grid rendered at 4× scale. Cut scenes (events, title, end, mini-game cards) are scene objects in `ui/cutscenes/` drawn at native 320×180 with the shared kit; time `t` is in seconds. Do not add static ASCII art — the ASCII renderer has been removed.
+- **Pixel scene format** — all scenes draw at native 320×180 with the shared kit in `ui/cutscenes/`. Travel terrains are `build(k)` modules (see `ui/cutscenes/travel/travel.js`); cut scenes (events, title, end, mini-game cards) are scene objects with `update(dt, t)` / `draw(g, t)`, time in seconds. Do not add static ASCII art — the ASCII renderer has been removed.
 - **OpenWeatherMap API key hardcoded** in `js/weather.js` — known security gap (backlog T1). Do not add any additional secrets to source files.
 - **Data integrity** — all quantitative values in `data/ssp.js` must be traceable to a source in `REFERENCES.md`. Never hardcode invented numbers for climate risk mechanics.
 

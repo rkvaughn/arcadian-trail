@@ -3,6 +3,7 @@ import { CutscenePlayer } from '../ui/cutscenes/director.js';
 import { EVENT_SCENES, bannerFor } from '../ui/cutscenes/index.js';
 
 const EXTRA = (await import('../ui/cutscenes/screensArt.js').catch(() => ({}))).GALLERY_SCENES || {};
+const TRAVEL = await import('../ui/cutscenes/travel/index.js').catch(() => null);
 
 const FAMILY = [
   { name: 'Walker', age: 38, alive: true }, { name: 'Sam', age: 36, alive: true },
@@ -25,7 +26,22 @@ let cur = { scene: q.get('scene') || 'wildfire', id: q.get('id') || null };
 let paused = q.get('pause') === '1';
 let simMs = 0;
 
+// Travel mode: ?travel=<terrain>&v=<variant seed>&day=<game day>&wx=<weather icon>
+let travel = null;
+function travelOpts() {
+  return { terrain: q.get('travel'), variantSeed: +(q.get('v') || 0), day: +(q.get('day') || 3),
+           weather: q.get('wx') || 'clear', moving: q.get('stop') !== '1', family: FAMILY, place: 'Orlando, FL' };
+}
 function start(seekT = 0) {
+  if (TRAVEL && q.get('travel')) {
+    travel = new TRAVEL.TravelRenderer(TRAVEL.TERRAINS);
+    simMs = 0;
+    travel.render(ctx, simMs, travelOpts());
+    travel.trans = 1;
+    while (travel.t < seekT) { simMs += 1000 / 30; travel.render(ctx, simMs, travelOpts()); }
+    travel.trans = 1;
+    return;
+  }
   player.reset();
   if (EVENT_SCENES[cur.scene]) {
     const ev = { id: cur.id || cur.scene, perilType: cur.scene, name: (cur.id || cur.scene).replace(/_/g, ' ') };
@@ -49,6 +65,21 @@ for (const [s, id] of all) {
   b.dataset.k = s + ':' + id;
   bar.appendChild(b);
 }
+if (TRAVEL) {
+  const tb = document.createElement('div');
+  tb.className = 'bar';
+  const link = (label, params) => {
+    const a = document.createElement('button');
+    a.textContent = label;
+    a.onclick = () => { const u = new URLSearchParams(location.search); for (const [k2, v2] of Object.entries(params)) u.set(k2, v2); u.delete('scene'); location.search = u; };
+    tb.appendChild(a);
+  };
+  for (const name of Object.keys(TRAVEL.TERRAINS)) link(name, { travel: name });
+  for (const v of [0, 1, 2]) link('variant ' + v, { v });
+  for (const [lbl, d] of [['dawn', 0], ['day', 3], ['dusk', 6], ['night', 9]]) link(lbl, { day: d });
+  for (const wx of ['clear', 'clouds', 'drizzle', 'rain', 'storm', 'snow', 'fog', 'wind', 'heat']) link(wx, { wx });
+  bar.after(tb);
+}
 function mark() { for (const b of bar.children) b.classList.toggle('on', b.dataset.k === cur.scene + ':' + cur.id); }
 
 document.getElementById('pause').onclick = () => { paused = !paused; };
@@ -70,9 +101,9 @@ let last = performance.now();
 function loop(now) {
   const d = now - last; last = now;
   if (!paused) simMs += d;
-  player.render(ctx, simMs);
+  if (travel) travel.render(ctx, simMs, travelOpts()); else player.render(ctx, simMs);
   if (mag) zctx.drawImage(ctx.canvas, mag[0], mag[1], mag[2], mag[3], 0, 0, zc.width, zc.height);
-  document.getElementById('tlabel').textContent = player.t.toFixed(1) + 's';
+  document.getElementById('tlabel').textContent = (travel ? travel.t : player.t).toFixed(1) + 's';
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

@@ -1,40 +1,25 @@
 /**
- * pixelRenderer.js — Canvas-based pixel-art renderer for Arcadian Trail
+ * pixelRenderer.js — Canvas renderer for the game screen in Arcadian Trail.
  *
- * Replaces asciiRenderer.js. Renders terrain and event scenes as pixel art
- * onto a <canvas> element at a fixed logical resolution (PW×PH), scaled up
- * to fill the container with crisp nearest-neighbor interpolation.
+ * Draws at the canvas's native 320×180 (CSS scales it up with crisp pixels):
+ *   - travel: the driving scene (ui/cutscenes/travel/), with terrain variants,
+ *     time-of-day palettes and in-scene weather
+ *   - EVENT / RESULT: the event's cut scene (ui/cutscenes/)
  *
- * Public interface is identical to AsciiRenderer:
+ * Public interface:
  *   new PixelRenderer(canvasEl, infoBarEl)
  *   renderer.render(game, weatherData, nowMs?)
  *
- * Called every animation frame (requestAnimationFrame) by js/main.js. Scenes
- * get a fractional frame clock derived from nowMs — see ANIM_TICK_MS.
+ * Called every animation frame (requestAnimationFrame) by js/main.js.
  */
 
 import { STATES } from '../js/game.js';
-import {
-  PW, PH,
-  drawTerrainScene,
-  drawVehicle,
-  drawWeather,
-} from '../data/pixelScenes.js';
+import { W as CANVAS_W, H as CANVAS_H } from './cutscenes/kit.js';
 import { CutscenePlayer } from './cutscenes/director.js';
 import { eventSceneFor, bannerFor } from './cutscenes/index.js';
-
-const SCALE = 4;                           // canvas px per logical px
-const CANVAS_W = PW * SCALE;              // 320 native canvas pixels wide
-const CANVAS_H = PH * SCALE;              // 180 native canvas pixels tall
-
-const TIME_PHASES = ['dawn', 'day', 'dusk', 'night'];
-const DAYS_PER_PHASE = 3;
+import { TravelRenderer, TERRAINS } from './cutscenes/travel/index.js';
 
 const PROGRESS_BAR_LENGTH = 20;
-
-// Animation clock unit. Scenes were tuned for one frame per 250 ms; keeping
-// that unit preserves their speeds while drawing at display refresh rate.
-const ANIM_TICK_MS = 250;
 
 export class PixelRenderer {
   constructor(canvasEl, infoBarEl) {
@@ -42,66 +27,42 @@ export class PixelRenderer {
     this.infoBar = infoBarEl;
     this.ctx     = canvasEl.getContext('2d');
     this.lastInfoBarStr = null;
-    this.lastTerrain = null;
     this.lastTerrainAttr = null;
-    this.lastFilter = null;
+    this.wasEvent = false;
 
     // Set native resolution; CSS width:100% / height:auto handles display scaling
     this.canvas.width  = CANVAS_W;
     this.canvas.height = CANVAS_H;
-
-    // Disable anti-aliasing so pixels stay crisp when scaled
     this.ctx.imageSmoothingEnabled = false;
+    // Lighting is drawn in-scene (palettes per time of day and weather), so the
+    // old CSS filter tint is retired.
+    this.canvas.style.filter = 'none';
 
     // Cache .game-layout ancestor — used to propagate data-terrain so CSS vars
     // cascade to all siblings (info bar, event panel, dashboard). V1/V2/V4.
     this.gameLayout = canvasEl.closest('.game-layout') || null;
 
-    // Event cut scenes draw at native 320×180 through their own player
     this.cutscene = new CutscenePlayer();
-  }
-
-  // Bound rect helper — draws one logical pixel block
-  _r(x, y, w, h, color) {
-    if (x >= PW || y >= PH || x + w <= 0 || y + h <= 0) return;
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(
-      Math.round(x) * SCALE,
-      Math.round(y) * SCALE,
-      Math.round(w) * SCALE,
-      Math.round(h) * SCALE
-    );
+    this.travel = new TravelRenderer(TERRAINS);
   }
 
   render(game, weatherData, nowMs = performance.now()) {
-    const frame = nowMs / ANIM_TICK_MS;
-    const r = this._r.bind(this);
     const ctx = this.ctx;
 
     if (!game || !game.route || game.route.length === 0) {
-      // Clear to dark and show loading placeholder
       ctx.fillStyle = '#1a1a2e';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       ctx.fillStyle = '#6a8a6a';
-      ctx.font = `${SCALE * 4}px monospace`;
+      ctx.font = '16px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('Preparing journey...', CANVAS_W / 2, CANVAS_H / 2);
       return;
     }
 
-    const wp         = game.getCurrentWaypoint();
-    const terrain    = wp ? wp.terrain : 'plains';
-    const isEvent    = (game.state === STATES.EVENT || game.state === STATES.RESULT)
-                       && !!game.currentEvent;
-    const weatherIcon = weatherData ? weatherData.icon : null;
-
-    // Determine if terrain changed (for data-terrain CSS attribute)
-    if (terrain !== this.lastTerrain) {
-      this.lastTerrain = terrain;
-    }
-
-    // ── Draw scene ──────────────────────────────────────────────────────────
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    const wp      = game.getCurrentWaypoint();
+    const terrain = wp ? wp.terrain : 'plains';
+    const isEvent = (game.state === STATES.EVENT || game.state === STATES.RESULT)
+                    && !!game.currentEvent;
 
     if (isEvent) {
       // A new event (after travelling) restarts the scene and its intro; the
@@ -112,10 +73,19 @@ export class PixelRenderer {
       this.cutscene.render(ctx, nowMs);
     } else {
       this.cutscene.reset();
-      drawTerrainScene(r, terrain, frame);
-      drawWeather(r, weatherIcon, frame);
-      drawVehicle(r, frame);
+      // Coming back from a cut scene: dissolve from its last frame
+      if (this.wasEvent) this.travel.dissolveFrom(this.canvas);
+      this.travel.render(ctx, nowMs, {
+        terrain,
+        variantSeed: game.waypointIndex || 0,   // each stretch of road gets its own look
+        day: game.day || 0,
+        weather: weatherData ? weatherData.icon : 'clear',
+        moving: game.state === STATES.TRAVELING,
+        family: game.family,
+        place: wp ? wp.name : '',
+      });
     }
+    this.wasEvent = isEvent;
 
     // ── Propagate data-terrain to canvas and game-layout parent ─────────────
     // V1: setting on game-layout makes CSS vars (--terrain-sky, --terrain-ground,
@@ -128,48 +98,7 @@ export class PixelRenderer {
       this.lastTerrainAttr = terrainAttr;
     }
 
-    // ── Compose day/night + weather into a single CSS filter ─────────────────
-    // V3: composing here lets weather tints stack cleanly on top of time-of-day
-    // effects. Previously these were separate CSS class filters that could not
-    // be combined without a wrapper element.
-    const phase = TIME_PHASES[
-      Math.floor(game.day / DAYS_PER_PHASE) % TIME_PHASES.length
-    ];
-    // Cut scenes carry their own per-peril lighting, so skip the tint for them
-    const composed = isEvent ? 'none' : [this._timeFilter(phase), this._weatherFilter(weatherIcon)]
-      .filter(Boolean).join(' ') || 'none';
-    if (composed !== this.lastFilter) {
-      this.canvas.style.filter = composed;
-      this.lastFilter = composed;
-    }
-
-    // ── Info bar ────────────────────────────────────────────────────────────
     this._updateInfoBar(game);
-  }
-
-  // V3: Day/night filter string — applied before weather tint (order matters in CSS filters)
-  _timeFilter(phase) {
-    switch (phase) {
-      case 'dawn':  return 'sepia(35%) brightness(0.80) saturate(0.85)';
-      case 'dusk':  return 'sepia(55%) brightness(0.72) hue-rotate(12deg) saturate(0.9)';
-      case 'night': return 'brightness(0.28) saturate(0.5) hue-rotate(200deg)';
-      default:      return '';
-    }
-  }
-
-  // V3: Weather color tint — stacks on top of the day/night base
-  _weatherFilter(weatherIcon) {
-    switch (weatherIcon) {
-      case 'rain':
-      case 'drizzle': return 'brightness(0.82) saturate(0.88)';
-      case 'storm':   return 'brightness(0.65) saturate(0.75)';
-      case 'snow':    return 'brightness(1.08) saturate(0.62)';
-      case 'heat':    return 'sepia(25%) hue-rotate(-18deg) brightness(1.04)';
-      case 'mist':
-      case 'fog':
-      case 'wind':    return 'brightness(0.92) saturate(0.85)';
-      default:        return '';
-    }
   }
 
   _updateInfoBar(game) {

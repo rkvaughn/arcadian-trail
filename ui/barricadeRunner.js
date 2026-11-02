@@ -1,3 +1,6 @@
+import { CutscenePlayer } from './cutscenes/director.js';
+import { barricadeCard } from './cutscenes/screensArt.js';
+
 const WIDTH = 70;
 const HEIGHT = 18;
 const PLAY_MIN_ROW = 3;
@@ -42,49 +45,7 @@ const PICKUP_TYPES = [
   { char: '$', cssClass: 'ascii-dash-health', name: 'supplies' },
 ];
 
-// Win scene: car speeding into distance
-const WIN_SCENE = [
-  "                                                                      ",
-  "      .    *      .    *      .    *      .    *      .    *          ",
-  "  *      .    *      .    *      .    *      .    *      .    *      ",
-  "                                                                      ",
-  "                     Y O U   E S C A P E D !                          ",
-  "                                                                      ",
-  "                          .  __                                       ",
-  "                        . _.'  '.__                                   ",
-  "                   ======'--()--()-'====>                              ",
-  "                                                                      ",
-  "            The barricade shrinks in the rearview mirror.             ",
-  "            Your family cheers. Freedom ahead.                        ",
-  "______________________________road___________________________________ ",
-  "  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---     ",
-  "______________________________road___________________________________ ",
-  "  ,,, ,,, ,,, ,,, ,,, ,,, open road ,,, ,,, ,,, ,,, ,,, ,,, ,,,    ",
-  "                                                                      ",
-  "                                                                      ",
-];
-
-// Lose scene: warlords cheering
-const LOSE_SCENE = [
-  "                                                                      ",
-  "                    C A U G H T !                                     ",
-  "                                                                      ",
-  "      \\o/    \\o/    \\o/    \\o/    \\o/    \\o/    \\o/              ",
-  "       |      |      |      |      |      |      |                   ",
-  "      / \\    / \\    / \\    / \\    / \\    / \\    / \\              ",
-  "                                                                      ",
-  "    The raiders surround the car. They bang on the hood and cheer.    ",
-  "    Your supplies are forfeit. Your family huddles in silence.        ",
-  "                                                                      ",
-  "       [####]====[####]  BARRICADE  [####]====[####]                  ",
-  "       |    |    |    |             |    |    |    |                  ",
-  "______________________________road___________________________________ ",
-  "  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---     ",
-  "______________________________road___________________________________ ",
-  "       X    X    X    wreckage    X    X    X    X                    ",
-  "                                                                      ",
-  "                                                                      ",
-];
+// Win/lose scene cards are pixel art: see barricadeCard in ui/cutscenes/screensArt.js
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -332,7 +293,9 @@ export class BarricadeRunner {
     }
 
     if (this.showingSceneCard) {
-      this._renderSceneCard(charGrid, colorGrid);
+      this._renderSceneCard();
+      this._updateInfoBar();
+      return;
     } else if (this.inCountdown) {
       this._renderCountdown(charGrid, colorGrid);
     } else {
@@ -347,15 +310,21 @@ export class BarricadeRunner {
     this._updateInfoBar();
   }
 
-  _renderSceneCard(charGrid, colorGrid) {
-    const scene = this.outcome === 'escaped' ? WIN_SCENE : LOSE_SCENE;
-    const css = this.outcome === 'escaped' ? 'ascii-player' : 'ascii-fire';
-    for (let r = 0; r < HEIGHT && r < scene.length; r++) {
-      for (let c = 0; c < WIDTH && c < scene[r].length; c++) {
-        charGrid[r][c] = scene[r][c];
-        if (scene[r][c] !== ' ') colorGrid[r][c] = css;
-      }
+  // Pixel-art win/lose card on a canvas inside the ASCII <pre>
+  _renderSceneCard() {
+    if (!this._cardCanvas) {
+      this._cardCanvas = document.createElement('canvas');
+      this._cardCanvas.className = 'scene-card-canvas';
+      this._cardCanvas.width = 320;
+      this._cardCanvas.height = 180;
+      this._cardPlayer = new CutscenePlayer();
     }
+    if (this._cardCanvas.parentNode !== this.display) {
+      this.display.replaceChildren(this._cardCanvas);
+      this._cardPlayer.reset();
+      this._cardPlayer.play(this.outcome, barricadeCard, { won: this.outcome === 'escaped' }, { dissolve: 0.2 });
+    }
+    this._cardPlayer.render(this._cardCanvas.getContext('2d'), performance.now());
   }
 
   _renderCountdown(charGrid, colorGrid) {

@@ -22,7 +22,8 @@ Read these files, in this order, to be oriented. Skip everything else unless the
 | 4 | `js/main.js` | GameController — wires all modules together |
 
 **Only if task involves rendering or visuals:**
-- `ui/pixelRenderer.js` — canvas-based pixel art renderer (replaced ASCII renderer in Phase 4)
+- `ui/pixelRenderer.js` — canvas-based pixel art renderer (replaced ASCII renderer in Phase 4); hands event/result states to the cut scene player
+- `ui/cutscenes/` — native 320×180 cut scenes: `kit.js` (sprites, bitmap font, dither, parallax, particles), `sprites.js` (family, station wagon, props), `director.js` (intro dissolve + title banner), `scenes/<peril>.js` (one per perilType, with event-id variants), `screensArt.js` (title, end screens, mini-game win/lose cards). Preview any scene with `python3 dev/serve.py` → `/dev/cutscenes.html`
 - `data/pixelScenes.js` — procedural pixel scene drawing functions per terrain/event type
 - `data/ssp.js` — terrain and scenario color context (SSP difficulty palette used by HUD)
 - `style.css` — terrain palette CSS vars (`[data-terrain="..."]`), day/night classes, SSP/year UI, research summary panel
@@ -70,7 +71,8 @@ Read these files, in this order, to be oriented. Skip everything else unless the
 | Barricade Runner mini-game (speed/collision escape) | ✅ |
 | Frogger river crossing mini-game (canvas, pixel art) | ✅ |
 | Mini-game choice triggers from eventDefs | ✅ |
-| Pixel art event scene cards (per-event POV) | ✅ |
+| Pixel art event scene cards (per-event POV) — 320×180 cut scenes, `ui/cutscenes/` | ✅ |
+| Animated pixel-art title + win/lose end screens | ✅ |
 | Creative endings (90s action taglines by peril) | ✅ |
 | Day/night cycle (4-phase CSS palette) | ✅ |
 | Real-time weather API (OpenWeatherMap) | ✅ |
@@ -146,7 +148,7 @@ The caller (`js/main.js`) applies `result.effects` to resources and routes to RE
 Primary agent for all work on this project:
 - All JavaScript, HTML, CSS changes
 - Game logic, events, items, routes, flags
-- Pixel art scene authoring (follow 80×45 logical pixel format in `data/pixelScenes.js`)
+- Pixel art scene authoring (travel scenes: 80×45 in `data/pixelScenes.js`; cut scenes: native 320×180 via the `ui/cutscenes/` kit)
 - Backlog management — update `BACKLOG.md` on task completion
 - Scientific calibration — all quantitative values must cite a source in `REFERENCES.md`
 - Git commits and pushes
@@ -167,7 +169,7 @@ When delegating to Gemini: pass `data/eventDefs.js` + `js/game.js` + the specifi
 - **No build tool** — vanilla ES6 `import`/`export`. All modules referenced by relative path. No npm packages at runtime.
 - **GitHub Pages auto-deploy** — push to `main` → live within ~60 seconds. No build step needed.
 - **No inline styles** — all colors via CSS classes or CSS custom properties. Terrain palettes live in `style.css` as `[data-terrain="..."]` blocks; activated by setting `data-terrain` attribute on the canvas element.
-- **Pixel scene format** — scenes are procedural drawing functions in `data/pixelScenes.js` operating on an 80×45 logical pixel grid rendered at 4× scale. Do not add static ASCII art — the ASCII renderer has been removed.
+- **Pixel scene format** — travel scenes are procedural drawing functions in `data/pixelScenes.js` operating on an 80×45 logical pixel grid rendered at 4× scale. Cut scenes (events, title, end, mini-game cards) are scene objects in `ui/cutscenes/` drawn at native 320×180 with the shared kit; time `t` is in seconds. Do not add static ASCII art — the ASCII renderer has been removed.
 - **OpenWeatherMap API key hardcoded** in `js/weather.js` — known security gap (backlog T1). Do not add any additional secrets to source files.
 - **Data integrity** — all quantitative values in `data/ssp.js` must be traceable to a source in `REFERENCES.md`. Never hardcode invented numbers for climate risk mechanics.
 

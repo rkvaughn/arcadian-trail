@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cut Scene Gallery</title>
+  <style>
+    :root { --bg: #0f0f1a; --fg: #e0e0e0; --btn: #1a1a2e; --on: #e94560; }
+    body { background: var(--bg); color: var(--fg); font-family: monospace; margin: 16px; }
+    canvas { display: block; width: 960px; max-width: 100%; image-rendering: pixelated; border: 2px solid #333; }
+    canvas.zoom { display: none; }
+    body.mag canvas#c { display: none; }
+    body.mag canvas.zoom { display: block; }
+    .bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    button { background: var(--btn); color: var(--fg); border: 1px solid #333; padding: 4px 8px; font-family: inherit; cursor: pointer; }
+    button.on { border-color: var(--on); color: var(--on); }
+  </style>
+</head>
+<body>
+  <p>Dev-only viewer for ui/cutscenes. Query: ?scene=wildfire&amp;id=toxic_air&amp;t=3&amp;pause=1</p>
+  <canvas id="c" width="320" height="180"></canvas>
+  <canvas id="z" class="zoom" width="10" height="10"></canvas>
+  <div class="bar" id="scenes"></div>
+  <div class="bar">
+    <button id="pause">pause</button>
+    <button id="restart">restart</button>
+    <label>t <input id="seek" type="range" min="0" max="12" step="0.1" value="0"></label>
+    <span id="tlabel"></span>
+  </div>
+  <script type="module" src="gallery.js"></script>
+</body>
+</html>

@@ -13,6 +13,8 @@
  *   .stop()
  */
 
+import { CardRunner, riverCard } from './cutscenes/screensArt.js';
+
 const PW    = 80;   // logical pixel width  (matches pixelRenderer)
 const PH    = 45;   // logical pixel height
 const SCALE = 4;    // canvas px per logical px
@@ -131,6 +133,7 @@ export class FroggerDash {
   stop() {
     this.running = false;
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+    if (this._card) { this._card.stop(); this._card = null; }
     if (this._boundKeyDown) {
       window.removeEventListener('keydown', this._boundKeyDown);
       this._boundKeyDown = null;
@@ -356,21 +359,14 @@ export class FroggerDash {
       drawText(ctx, '↑↓ hop lanes   ←→ shift position', PW / 2, PH / 2 + 10, '#cccccc', 8);
     }
 
-    // ── Win screen ───────────────────────────────────────────────────────
-    if (this.state === 'won') {
-      r(10, 14, 60, 18, '#0a2a08');
-      r(11, 15, 58, 16, '#1a4a14');
-      drawText(ctx, 'ACROSS!', PW / 2, PH / 2 - 2, '#ffd700', 18);
-      drawText(ctx, 'Far bank reached', PW / 2, PH / 2 + 7, '#aaddaa', 8);
-    }
-
-    // ── Fail screen ──────────────────────────────────────────────────────
-    if (this.state === 'failed') {
-      r(10, 14, 60, 18, '#2a0808');
-      r(11, 15, 58, 16, '#4a1414');
-      const msg = player.health <= 0 ? 'SWEPT AWAY!' : 'TIME\'S UP!';
-      drawText(ctx, msg, PW / 2, PH / 2 - 2, '#ff6666', 14);
-      drawText(ctx, 'Pulled back to shore', PW / 2, PH / 2 + 7, '#ddaaaa', 8);
+    // ── Win / fail scene card (pixel art, animates until stop()) ─────────
+    if ((this.state === 'won' || this.state === 'failed') && !this._card) {
+      const won = this.state === 'won';
+      this._card = new CardRunner(this.canvas);
+      this._card.start(riverCard, {
+        won,
+        title: won ? 'ACROSS!' : (player.health <= 0 ? 'SWEPT AWAY!' : 'TIME\'S UP!'),
+      });
     }
 
     // ── Border frame ─────────────────────────────────────────────────────

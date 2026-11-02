@@ -17,10 +17,11 @@ import { STATES } from '../js/game.js';
 import {
   PW, PH,
   drawTerrainScene,
-  drawEventScene,
   drawVehicle,
   drawWeather,
 } from '../data/pixelScenes.js';
+import { CutscenePlayer } from './cutscenes/director.js';
+import { eventSceneFor, bannerFor } from './cutscenes/index.js';
 
 const SCALE = 4;                           // canvas px per logical px
 const CANVAS_W = PW * SCALE;              // 320 native canvas pixels wide
@@ -55,6 +56,9 @@ export class PixelRenderer {
     // Cache .game-layout ancestor — used to propagate data-terrain so CSS vars
     // cascade to all siblings (info bar, event panel, dashboard). V1/V2/V4.
     this.gameLayout = canvasEl.closest('.game-layout') || null;
+
+    // Event cut scenes draw at native 320×180 through their own player
+    this.cutscene = new CutscenePlayer();
   }
 
   // Bound rect helper — draws one logical pixel block
@@ -100,8 +104,14 @@ export class PixelRenderer {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
     if (isEvent) {
-      drawEventScene(r, game.currentEvent.perilType, frame);
+      // A new event (after travelling) restarts the scene and its intro; the
+      // RESULT card for the same event keeps playing the scene it started.
+      const ev = game.currentEvent;
+      this.cutscene.play(ev, eventSceneFor(ev.perilType),
+        { family: game.family, eventId: ev.id, perilType: ev.perilType }, bannerFor(ev));
+      this.cutscene.render(ctx, nowMs);
     } else {
+      this.cutscene.reset();
       drawTerrainScene(r, terrain, frame);
       drawWeather(r, weatherIcon, frame);
       drawVehicle(r, frame);
@@ -125,7 +135,8 @@ export class PixelRenderer {
     const phase = TIME_PHASES[
       Math.floor(game.day / DAYS_PER_PHASE) % TIME_PHASES.length
     ];
-    const composed = [this._timeFilter(phase), this._weatherFilter(weatherIcon)]
+    // Cut scenes carry their own per-peril lighting, so skip the tint for them
+    const composed = isEvent ? 'none' : [this._timeFilter(phase), this._weatherFilter(weatherIcon)]
       .filter(Boolean).join(' ') || 'none';
     if (composed !== this.lastFilter) {
       this.canvas.style.filter = composed;

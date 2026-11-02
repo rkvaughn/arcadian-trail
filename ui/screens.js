@@ -4,6 +4,7 @@ import { getTraits } from '../js/characters.js';
 import { itemDefs } from '../data/items.js';
 import { SSP_DEFS, YEAR_DEFS } from '../data/ssp.js';
 import { generateResearchSummary } from './researchSummary.js';
+import { ScreenArt, titleScene, endWinScene, endLoseScene } from './cutscenes/screensArt.js';
 
 // 90s action movie taglines keyed by dominant peril type
 const WIN_TAGLINES = {
@@ -35,8 +36,12 @@ const LOSE_TAGLINES = {
 
 function getTagline(perilHistory, isWin) {
   const taglines = isWin ? WIN_TAGLINES : LOSE_TAGLINES;
+  const pool = taglines[dominantPeril(perilHistory)] || taglines.default;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
-  // Find the dominant peril type (most frequent)
+// Most frequent peril type of the run ('default' if none)
+function dominantPeril(perilHistory) {
   const counts = {};
   for (const type of perilHistory) {
     counts[type] = (counts[type] || 0) + 1;
@@ -50,9 +55,7 @@ function getTagline(perilHistory, isWin) {
       dominant = type;
     }
   }
-
-  const pool = taglines[dominant] || taglines.default;
-  return pool[Math.floor(Math.random() * pool.length)];
+  return dominant;
 }
 
 export class ScreenManager {
@@ -70,10 +73,16 @@ export class ScreenManager {
     for (const [id, el] of Object.entries(this.screens)) {
       el.classList.toggle('active', id === screenId);
     }
+    // Only animate the cut scene of the screen that is showing
+    if (screenId !== 'title') this.titleArt?.stop();
+    if (screenId !== 'end') this.endArt?.stop();
   }
 
   initTitle() {
     this.show('title');
+    // V3: animated pixel-art title card
+    this.titleArt = new ScreenArt(document.getElementById('title-art'));
+    this.titleArt.start(titleScene);
     document.getElementById('btn-start').addEventListener('click', () => {
       this.initSetup();
     });
@@ -263,6 +272,14 @@ export class ScreenManager {
     const scoreEl = document.getElementById('end-score');
 
     const tagline = getTagline(game.perilHistory || [], isWin);
+
+    // V4: animated win/lose cut scene above the tagline
+    this.endArt = new ScreenArt(document.getElementById('end-art'));
+    if (isWin) {
+      this.endArt.start(endWinScene, { family: game.family, destName: game.destination?.name });
+    } else {
+      this.endArt.start(endLoseScene, { peril: dominantPeril(game.perilHistory || []) });
+    }
 
     // Build family roster for end screen
     const rosterHtml = game.family.map(m => {

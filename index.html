@@ -12,8 +12,9 @@
   <!-- TITLE SCREEN -->
   <div id="screen-title" class="screen active">
     <div class="title-container">
-      <h1 class="title-main">Arcadian Trail</h1>
-      <p class="title-sub">The Last Safe Road</p>
+      <canvas id="title-art" class="cutscene-art" width="320" height="180" aria-hidden="true"></canvas>
+      <h1 class="title-main sr-only">Arcadian Trail</h1>
+      <p class="title-sub sr-only">The Last Safe Road</p>
       <p class="title-desc">Climate collapse has made the coasts and sunbelt unlivable. Choose your year, your emissions pathway, and lead your family north — through wildfires, floods, and failing infrastructure — to a climate refuge before your supplies run out.</p>
       <button id="btn-start" class="btn-primary">Start Journey</button>
     </div>
@@ -100,6 +101,7 @@
   <!-- END SCREEN -->
   <div id="screen-end" class="screen">
     <div class="end-container">
+      <canvas id="end-art" class="cutscene-art" width="320" height="180" aria-hidden="true"></canvas>
       <h2 id="end-title"></h2>
       <div id="end-score"></div>
       <div id="end-summary"></div>

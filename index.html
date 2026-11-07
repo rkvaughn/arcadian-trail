@@ -83,12 +83,20 @@
       <!-- Stage: scene, progress bar and map sized to fit one screen; event/route
            choices pop up over the scene (#event-panel is positioned in the stage) -->
       <div class="game-map-section">
-        <div class="scene-wrap">
+        <div class="scene-wrap" data-view="scene">
           <canvas id="asciiDisplay" class="ascii-display"></canvas>
           <pre id="miniGameDisplay" class="ascii-display" style="display:none"></pre>
+          <div id="map-view" class="map-view" aria-label="Route map">
+            <div id="progressMap" class="progress-map"></div>
+          </div>
         </div>
-        <div id="asciiInfoBar" class="ascii-info-bar"></div>
-        <div id="progressMap" class="progress-map"></div>
+        <div class="stage-bar">
+          <div id="asciiInfoBar" class="ascii-info-bar"></div>
+          <div class="stage-tabs" role="group" aria-label="Show in the main view">
+            <button type="button" id="tab-scene" class="stage-tab" aria-pressed="true" data-view="scene">Scene</button>
+            <button type="button" id="tab-map" class="stage-tab" aria-pressed="false" aria-controls="map-view" data-view="map">Map</button>
+          </div>
+        </div>
         <div id="event-panel" class="event-panel" role="dialog" aria-live="polite"></div>
       </div>
       <div class="game-side">

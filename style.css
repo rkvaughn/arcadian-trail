@@ -422,29 +422,86 @@ body {
   display: flex;
   justify-content: center;
   gap: 16px;
-  max-width: 1400px;
+  max-width: 1640px;
   width: 100%;
   height: 100%;
   margin: 0 auto;
 }
 
-/* Stage: scene + progress bar + map, sized so all three fit the window with no
-   scrolling. Scene is 16:9 and the map image is 1408×768, so for a stage width w:
-     height = w·9/16 + w·768/1408 + chrome   →   w = (height − chrome) / (0.5625 + 0.5455)
-   (chrome = info bar + frame borders). The event pop-up is positioned in here. */
+/* Stage: the scene and the trip bar. The map lives in a Map tab over the scene.
+   Width is 1.3× the old scene+map stack, w = (height − chrome) / 1.108 (user
+   asked for a 30% larger scene, 2026-11-02); the scene alone (w·9/16 + chrome)
+   then still fits the window height. The event pop-up is positioned in here. */
 .game-map-section {
   --stage-chrome: 34px;
   position: relative;
   flex: 1 1 0;
   min-width: 0;
-  max-width: calc((100vh - 20px - var(--stage-chrome)) / 1.108);
-  max-width: calc((100dvh - 20px - var(--stage-chrome)) / 1.108);
+  max-width: calc((100vh - 20px - var(--stage-chrome)) / 1.108 * 1.3);
+  max-width: calc((100dvh - 20px - var(--stage-chrome)) / 1.108 * 1.3);
   display: flex;
   flex-direction: column;
 }
 
 .scene-wrap {
   position: relative;
+}
+
+/* Map tab: covers the scene inside its frame. Kept laid out (visibility, not
+   display) so the route overlay always knows its size. */
+.map-view {
+  position: absolute;
+  inset: 3px 3px 0 3px;          /* inside the scene's frame border */
+  display: flex;
+  align-items: center;
+  background: #2a1a08;
+  visibility: hidden;
+}
+.scene-wrap[data-view="map"] .map-view {
+  visibility: visible;
+}
+
+/* Trip bar under the scene: the trip HUD plus the Scene / Map tabs */
+.stage-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--terrain-ground);
+  border: 3px solid var(--terrain-ground);
+  border-top: 2px solid var(--terrain-sky);
+  border-radius: 0 0 var(--radius) var(--radius);
+  transition: background 0.5s ease, border-color 0.5s ease;
+}
+.stage-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px 4px 3px 0;
+}
+.stage-tabs[hidden] {
+  display: none;
+}
+.stage-tab {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75em;
+  font-weight: bold;
+  /* fixed light-on-dark, not terrain colors, so it reads on every terrain */
+  color: var(--text);
+  background: var(--bg-dark);
+  border: 1px solid var(--bg-dark);
+  border-radius: 4px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.stage-tab:hover {
+  border-color: var(--gold);
+}
+.stage-tab[aria-pressed="true"] {
+  color: var(--bg-dark);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.stage-tab:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
 }
 
 .ascii-display {
@@ -466,12 +523,10 @@ body {
 }
 
 .ascii-info-bar {
-  /* V2: info bar adopts terrain ground color — completes the sky/ground frame */
-  background: var(--terrain-ground);
-  border: 3px solid var(--terrain-ground);
-  border-top: 2px solid var(--terrain-sky);
-  border-bottom: none;
-  padding: 6px 12px;
+  /* V2: the trip bar (.stage-bar) carries the terrain ground color and frame */
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 9px;
   font-family: 'Courier New', monospace;
   font-size: 0.8em;
   color: var(--terrain-text);
@@ -498,11 +553,8 @@ body {
 .ascii-dash-health { color: var(--green); }
 .ascii-shelter    { color: var(--gold); font-weight: bold; }
 
-/* === PROGRESS MAP (color overlay) === */
+/* === PROGRESS MAP (color overlay), shown in the Map tab === */
 .progress-map {
-  border: 3px solid #1a0a00;
-  border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
   overflow: hidden;
   margin: 0;
   padding: 0;
@@ -553,14 +605,14 @@ body {
 .dashboard {
   background: var(--bg-card);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 8px 12px;
 }
 
 .resource-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 3px;
 }
 .resource-bar:last-child {
   margin-bottom: 0;
@@ -570,39 +622,39 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-width: 90px;
+  min-width: 68px;
 }
 
 .resource-icon {
-  font-size: 0.9em;
+  font-size: 0.72em;
 }
 
 .resource-name {
   text-transform: capitalize;
-  font-size: 0.8em;
+  font-size: 0.7em;
   color: var(--text-dim);
 }
 
 .resource-track {
   flex: 1;
-  height: 10px;
+  height: 5px;
   background: rgba(255,255,255,0.08);
-  border-radius: 5px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .resource-fill {
   height: 100%;
-  border-radius: 5px;
+  border-radius: 3px;
   transition: width 0.5s ease, background-color 0.5s ease;
   width: 100%;
   background-color: var(--green);
 }
 
 .resource-value {
-  min-width: 28px;
+  min-width: 24px;
   text-align: right;
-  font-size: 0.8em;
+  font-size: 0.7em;
   color: var(--text-dim);
 }
 
@@ -615,9 +667,9 @@ body {
   font-weight: bold;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  padding: 5px 0 10px;
+  padding: 0 0 6px;
   border-bottom: 1px solid rgba(255,255,255,0.07);
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .scenario-ssp {
   font-weight: bold;
@@ -1420,6 +1472,22 @@ body {
 }
 
 /* === RESPONSIVE === */
+/* Touch screens: taller Scene / Map buttons that are easy to tap */
+@media (pointer: coarse) {
+  .stage-tab {
+    min-height: 32px;
+    padding: 0 14px;
+  }
+}
+
+/* Narrow windows and phones held sideways: a narrower side column leaves room
+   for the bigger scene (portrait phones stack instead, below) */
+@media (max-width: 1000px), (max-height: 500px) and (orientation: landscape) {
+  .game-side {
+    flex-basis: 260px;
+  }
+}
+
 @media (max-width: 768px) and (orientation: portrait) {
   #screen-game {
     height: auto;
@@ -1448,7 +1516,7 @@ body {
   }
   .ascii-info-bar {
     font-size: clamp(0.55em, 1.8vw, 0.8em);
-    padding: 4px 8px;
+    padding: 3px 6px;
   }
   .item-grid {
     grid-template-columns: 1fr;

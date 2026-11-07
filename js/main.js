@@ -48,6 +48,14 @@ class GameController {
     this.progressMap = new MapOverlay(document.getElementById('progressMap'));
     this.familyRoster = document.getElementById('family-roster');
 
+    // Scene / Map tabs under the scene
+    this.sceneWrap = document.querySelector('.scene-wrap');
+    this.stageTabsEl = document.querySelector('.stage-tabs');
+    this.stageTabs = [...this.stageTabsEl.querySelectorAll('.stage-tab')];
+    for (const tab of this.stageTabs) {
+      tab.addEventListener('click', () => this.setStageView(tab.dataset.view));
+    }
+
     const displayEl = document.getElementById('asciiDisplay');
     const infoBarEl = document.getElementById('asciiInfoBar');
     const miniGameEl = document.getElementById('miniGameDisplay');
@@ -56,6 +64,22 @@ class GameController {
     this.froggerDash = new FroggerDash(displayEl, infoBarEl);
 
     this.screens.initTitle();
+  }
+
+  /** Show the cut scene ('scene') or the route map ('map') in the stage. */
+  setStageView(view) {
+    // A mini-game is played on the scene, so the map can't cover it
+    if (view === 'map' && this.game.state === STATES.MINIGAME) return;
+    this.sceneWrap.dataset.view = view;
+    for (const tab of this.stageTabs) {
+      tab.setAttribute('aria-pressed', String(tab.dataset.view === view));
+    }
+  }
+
+  /** Hide the tabs while a mini-game runs, so its instructions get the whole bar. */
+  _lockStageTabs(locked) {
+    if (locked) this.setStageView('scene');
+    this.stageTabsEl.hidden = locked;
   }
 
   updateRoster() {
@@ -73,6 +97,8 @@ class GameController {
   }
 
   beginGame(origin, dest, leaderName, leaderTrait, familySize, items, year, ssp) {
+    this._lockStageTabs(false);
+    this.setStageView('scene');   // a new run starts on the scene
     const result = this.game.setup(origin, dest, leaderName, leaderTrait, familySize, items, year, ssp);
 
     if (result.error) {
@@ -146,6 +172,7 @@ class GameController {
         case 'event':
           clearInterval(this.travelInterval);
           this.travelInterval = null;
+          this.setStageView('scene');   // the event's cut scene plays here
           this.eventPanel.show(result.event, {
             waypoint: this.game.getCurrentWaypoint(),
             odds: result.event.choices.map(c => c.minigame
@@ -257,6 +284,7 @@ class GameController {
     this.travelInterval = null;
     this.stopRenderLoop();
     this.game.state = STATES.MINIGAME;
+    this._lockStageTabs(true);
 
     const progress = this.game.getProgress();
     const callback = (mgResult) => this._onMiniGameComplete(mgResult);
@@ -288,6 +316,7 @@ class GameController {
   }
 
   _onMiniGameComplete(result) {
+    this._lockStageTabs(false);
     // Spend supplies the mini-game actually used
     consumeMinigameUses(this.game, result.used);
     // Family members a mini-game lost (Ford the River) die through the event death path
